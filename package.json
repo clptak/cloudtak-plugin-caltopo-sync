@@ -1,0 +1,36 @@
+{
+    "name": "cloudtak-plugin-caltopo-sync",
+    "version": "0.0.0",
+    "description": "CloudTAK frontend plugin for bidirectional Caltopo Map ↔ TAK Mission sync via a Node-RED engine",
+    "type": "module",
+    "private": true,
+    "license": "AGPL-3.0",
+    "engines": {
+        "node": ">= 24"
+    },
+    "scripts": {
+        "lint": "eslint src",
+        "check": "vue-tsc --noEmit",
+        "typecheck": "vue-tsc --noEmit"
+    },
+    "peerDependencies": {
+        "@tak-ps/cloudtak": "*",
+        "@tak-ps/vue-tabler": "*",
+        "@tabler/icons-vue": "*",
+        "maplibre-gl": "*",
+        "pinia": "*",
+        "vue": "*",
+        "vue-router": "*"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.14.0",
+        "@tak-ps/cloudtak": "file:../../CloudTAK/api/web",
+        "@vue/tsconfig": "^0.7.0",
+        "eslint": "^9.14.0",
+        "eslint-plugin-vue": "^9.30.0",
+        "globals": "^15.12.0",
+        "typescript": "^5.6.0",
+        "typescript-eslint": "^8.13.0",
+        "vue-tsc": "^2.1.10"
+    }
+}
