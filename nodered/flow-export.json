@@ -4,10 +4,9 @@
         "type": "tab",
         "label": "Caltopo Sync Plugin Bridge",
         "disabled": false,
-        "info": "Importable bridge tab exposing the Phase 2 plugin HTTP contract.\n\nEndpoints:\n  POST   /sync/run\n  GET    /sync/pairs\n  POST   /sync/pairs\n  DELETE /sync/pairs/:id\n  GET    /sync/health\n\nThe bridge is mostly additive. The legacy GET /api/CalTAKsync flow on the\n'Caltopo <-> TAK' tab is left untouched. The ONLY modifications to legacy\nnodes are wire-list appends on two existing terminal debug nodes\n(sync04caltopoDebug, sync09takDebug) so the bridge can observe per-feature\ncompletion signals. See README.md → 'What this import modifies'.\n\nThe POST /sync/run path triggers the existing fan-out change node\na075cdac694b8631, then waits for real per-feature completion signals\n(via link-in cab1700800000003) and aggregates counts before responding\nsynchronously. No polling.\n\nPostgres operations reference the existing postgresdb config node 0401336095afd0b1\n(POSTGRES_HOST/POSTGRES_DB env-driven). On import, Node-RED will prompt if the\nconfig node id is not present locally.",
+        "info": "Importable bridge tab exposing the Phase 2 plugin HTTP contract.\n\nEndpoints:\n  POST   /sync/run\n  GET    /sync/pairs\n  POST   /sync/pairs\n  DELETE /sync/pairs/:id\n  GET    /sync/health\n\nThe bridge is mostly additive. The legacy GET /api/CalTAKsync flow on the\n'Caltopo <-> TAK' tab is left untouched. The ONLY modifications to legacy\nnodes are wire-list appends on two existing terminal debug nodes\n(sync04caltopoDebug, sync09takDebug) so the bridge can observe per-feature\ncompletion signals. See README.md \u2192 'What this import modifies'.\n\nThe POST /sync/run path triggers the existing fan-out change node\na075cdac694b8631, then waits for real per-feature completion signals\n(via link-in cab1700800000003) and aggregates counts before responding\nsynchronously. No polling.\n\nPostgres operations reference the existing postgresdb config node 0401336095afd0b1\n(POSTGRES_HOST/POSTGRES_DB env-driven). On import, Node-RED will prompt if the\nconfig node id is not present locally.",
         "env": []
     },
-
     {
         "id": "cab1700100000001",
         "type": "http in",
@@ -19,7 +18,11 @@
         "swaggerDoc": "",
         "x": 140,
         "y": 60,
-        "wires": [["cab1700200000001"]]
+        "wires": [
+            [
+                "cab1700200000001"
+            ]
+        ]
     },
     {
         "id": "cab1700100000002",
@@ -32,7 +35,11 @@
         "swaggerDoc": "",
         "x": 140,
         "y": 100,
-        "wires": [["cab1700200000001"]]
+        "wires": [
+            [
+                "cab1700200000001"
+            ]
+        ]
     },
     {
         "id": "cab1700100000003",
@@ -45,7 +52,11 @@
         "swaggerDoc": "",
         "x": 140,
         "y": 140,
-        "wires": [["cab1700200000001"]]
+        "wires": [
+            [
+                "cab1700200000001"
+            ]
+        ]
     },
     {
         "id": "cab1700100000004",
@@ -58,7 +69,11 @@
         "swaggerDoc": "",
         "x": 140,
         "y": 180,
-        "wires": [["cab1700200000001"]]
+        "wires": [
+            [
+                "cab1700200000001"
+            ]
+        ]
     },
     {
         "id": "cab1700200000001",
@@ -74,7 +89,11 @@
         "libs": [],
         "x": 430,
         "y": 120,
-        "wires": [["cab1700200000002"]]
+        "wires": [
+            [
+                "cab1700200000002"
+            ]
+        ]
     },
     {
         "id": "cab1700200000002",
@@ -87,7 +106,6 @@
         "y": 120,
         "wires": []
     },
-
     {
         "id": "cab1700300000001",
         "type": "http in",
@@ -99,7 +117,11 @@
         "swaggerDoc": "",
         "x": 130,
         "y": 260,
-        "wires": [["cab1700300000002"]]
+        "wires": [
+            [
+                "cab1700300000002"
+            ]
+        ]
     },
     {
         "id": "cab1700300000002",
@@ -116,9 +138,15 @@
         "x": 410,
         "y": 260,
         "wires": [
-            ["a075cdac694b8631"],
-            ["cab170030000000b"],
-            ["cab1700800000010"]
+            [
+                "a075cdac694b8631"
+            ],
+            [
+                "cab170030000000b"
+            ],
+            [
+                "cab1700800000010"
+            ]
         ]
     },
     {
@@ -132,7 +160,6 @@
         "y": 220,
         "wires": []
     },
-
     {
         "id": "cab1700800000003",
         "type": "link in",
@@ -144,14 +171,18 @@
         ],
         "x": 150,
         "y": 360,
-        "wires": [["cab1700800000004"]]
+        "wires": [
+            [
+                "cab1700800000004"
+            ]
+        ]
     },
     {
         "id": "cab1700800000004",
         "type": "function",
         "z": "caa17000bb1cafe0",
         "name": "Tag direction + tally",
-        "func": "/* jshint esversion: 8, node: true */\n// Each per-feature completion signal arrives here. We tag it with the source\n// direction (based on link-out id stamped via msg._completionDirection) and\n// fan it out to a per-direction debounce trigger. The trigger node emits a\n// single \"direction-done\" message after IDLE_MS of silence (no new feature\n// signals for the same correlationId+direction).\n//\n// CorrelationId propagation (verified):\n//   POST /sync/run → trigger msg.correlationId → a075cdac694b8631 (change,\n//   additive) → phase1extractParams (Object.assign({}, msg) preserves) →\n//   downstream change/function nodes (mutate msg in place OR use {...msg, ...}\n//   spread) → terminal debug nodes → link-out → here.\n//\n// If correlationId is missing (older browser hitting the legacy endpoint, or\n// a deep node we did not audit dropping it), we route to /dev/null — the\n// signal cannot be attributed to a run.\n\nconst correlationId = msg.correlationId;\nif (!correlationId) {\n    node.warn('completion signal without correlationId; dropping');\n    return null;\n}\n\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) {\n    // Completion arriving after we already responded/timed-out. Ignore.\n    return null;\n}\n\nconst direction = msg._completionDirection || 'unknown';\n\nif (direction === 'caltopo') {\n    ctx.counts.caltopo_features += 1;\n    if (msg.statusCode && msg.statusCode >= 400) ctx.counts.caltopo_errors += 1;\n} else if (direction === 'tak') {\n    ctx.counts.tak_features += 1;\n    if (msg.statusCode && msg.statusCode >= 400) ctx.counts.tak_errors += 1;\n}\nflow.set('run_' + correlationId, ctx);\n\n// Forward a thin debounce-key message. The trigger node downstream is\n// configured to extend its idle timer on every new message with the same\n// topic, then emit the held message once IDLE_MS has elapsed without any\n// new message.\nreturn {\n    correlationId: correlationId,\n    topic: correlationId + ':' + direction,\n    _kind: 'feature_signal',\n    _completionDirection: direction\n};",
+        "func": "/* jshint esversion: 8, node: true */\n// Each per-feature completion signal arrives here. We tag it with the source\n// direction (based on link-out id stamped via msg._completionDirection) and\n// fan it out to a per-direction debounce trigger. The trigger node emits a\n// single \"direction-done\" message after IDLE_MS of silence (no new feature\n// signals for the same correlationId+direction).\n//\n// CorrelationId propagation (verified):\n//   POST /sync/run \u2192 trigger msg.correlationId \u2192 a075cdac694b8631 (change,\n//   additive) \u2192 phase1extractParams (Object.assign({}, msg) preserves) \u2192\n//   downstream change/function nodes (mutate msg in place OR use {...msg, ...}\n//   spread) \u2192 terminal debug nodes \u2192 link-out \u2192 here.\n//\n// If correlationId is missing (older browser hitting the legacy endpoint, or\n// a deep node we did not audit dropping it), we route to /dev/null \u2014 the\n// signal cannot be attributed to a run.\n\nconst correlationId = msg.correlationId;\nif (!correlationId) {\n    node.warn('completion signal without correlationId; dropping');\n    return null;\n}\n\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) {\n    // Completion arriving after we already responded/timed-out. Ignore.\n    return null;\n}\n\nconst direction = msg._completionDirection || 'unknown';\n\nif (direction === 'caltopo') {\n    ctx.counts.caltopo_features += 1;\n    if (msg.statusCode && msg.statusCode >= 400) ctx.counts.caltopo_errors += 1;\n} else if (direction === 'tak') {\n    ctx.counts.tak_features += 1;\n    if (msg.statusCode && msg.statusCode >= 400) ctx.counts.tak_errors += 1;\n}\nflow.set('run_' + correlationId, ctx);\n\n// Forward a thin debounce-key message. The trigger node downstream is\n// configured to extend its idle timer on every new message with the same\n// topic, then emit the held message once IDLE_MS has elapsed without any\n// new message.\nreturn {\n    correlationId: correlationId,\n    topic: correlationId + ':' + direction,\n    _kind: 'feature_signal',\n    _completionDirection: direction\n};",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -160,7 +191,11 @@
         "libs": [],
         "x": 380,
         "y": 360,
-        "wires": [["cab1700800000005"]]
+        "wires": [
+            [
+                "cab1700800000005"
+            ]
+        ]
     },
     {
         "id": "cab1700800000005",
@@ -181,13 +216,17 @@
         "outputs": 1,
         "x": 650,
         "y": 360,
-        "wires": [["cab1700800000008"]]
+        "wires": [
+            [
+                "cab1700800000008"
+            ]
+        ]
     },
     {
         "id": "cab1700800000008",
         "type": "function",
         "z": "caa17000bb1cafe0",
-        "name": "Direction done → join",
+        "name": "Direction done \u2192 join",
         "func": "/* jshint esversion: 8, node: true */\n// Trigger node fires this after 3s of silence on a (correlationId, direction)\n// topic. Re-key for the join node which correlates BOTH directions for the\n// same correlationId.\nconst correlationId = msg.correlationId;\nif (!correlationId) return null;\n\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) return null; // already finalized\n\nmsg.topic = correlationId;\nmsg.payload = {\n    direction: msg._completionDirection,\n    counts: Object.assign({}, ctx.counts)\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
@@ -197,7 +236,11 @@
         "libs": [],
         "x": 900,
         "y": 360,
-        "wires": [["cab1700800000009"]]
+        "wires": [
+            [
+                "cab1700800000009"
+            ]
+        ]
     },
     {
         "id": "cab1700800000010",
@@ -218,7 +261,11 @@
         "outputs": 1,
         "x": 410,
         "y": 320,
-        "wires": [["cab1700800000011"]]
+        "wires": [
+            [
+                "cab1700800000011"
+            ]
+        ]
     },
     {
         "id": "cab1700800000011",
@@ -234,7 +281,11 @@
         "libs": [],
         "x": 680,
         "y": 320,
-        "wires": [["cab1700800000009"]]
+        "wires": [
+            [
+                "cab1700800000009"
+            ]
+        ]
     },
     {
         "id": "cab1700800000009",
@@ -258,13 +309,17 @@
         "reduceFixup": "",
         "x": 1130,
         "y": 360,
-        "wires": [["cab170080000000a"]]
+        "wires": [
+            [
+                "cab170080000000a"
+            ]
+        ]
     },
     {
         "id": "cab170080000000a",
         "type": "function",
         "z": "caa17000bb1cafe0",
-        "name": "Finalize response → stale-delete SQL",
+        "name": "Finalize response \u2192 stale-delete SQL",
         "func": "/* jshint esversion: 8, node: true */\n// Both directions have reported done (or the safety timeout synthesized\n// signals). Read counts from flow context, build the response body, and\n// hand off to the stale-delete postgres step (which will also stamp\n// last_sync_at on sync_pairs and finalize the response).\n\nconst grouped = msg.payload || {};\nconst correlationId = (msg.topic || '').toString();\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) {\n    // Already finalized by a previous path; drop silently.\n    return null;\n}\n\n// Release the per-mapID concurrency lock.\nif (ctx.activeKey) flow.set(ctx.activeKey, undefined);\n\nconst durationMs = Date.now() - (ctx.runStartMs || Date.now());\n\nconst caltopoCounts = (grouped.caltopo && grouped.caltopo.counts) || ctx.counts;\nconst takCounts     = (grouped.tak     && grouped.tak.counts)     || ctx.counts;\nconst syntheticCaltopo = grouped.caltopo && grouped.caltopo.synthetic;\nconst syntheticTak     = grouped.tak     && grouped.tak.synthetic;\n\nconst errors = [];\nif (ctx.timedOut) {\n    errors.push('overall safety timeout (30s) elapsed; one or both directions may not have completed');\n}\nif ((caltopoCounts.caltopo_errors || 0) > 0) {\n    errors.push((caltopoCounts.caltopo_errors || 0) + ' caltopo-direction HTTP errors');\n}\nif ((takCounts.tak_errors || 0) > 0) {\n    errors.push((takCounts.tak_errors || 0) + ' tak-direction HTTP errors');\n}\n\nconst body = {\n    added: (caltopoCounts.caltopo_features || 0) + (takCounts.tak_features || 0),\n    updated: 0,\n    deleted: 0,\n    conflicts: 0,\n    duration_ms: durationMs,\n    errors: errors,\n    _signal: {\n        caltopo_features: caltopoCounts.caltopo_features || 0,\n        tak_features: takCounts.tak_features || 0,\n        caltopo_synthetic: Boolean(syntheticCaltopo),\n        tak_synthetic: Boolean(syntheticTak)\n    }\n};\n\nmsg.payload = `\n  WITH stale_delete AS (\n    DELETE FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND COALESCE(seen_on_caltopo_at, 'epoch'::timestamptz) < $2::timestamptz\n       AND COALESCE(seen_on_tak_at,     'epoch'::timestamptz) < $2::timestamptz\n       AND last_sync_source IS NOT NULL\n    RETURNING feature_id\n  ),\n  conflict_count AS (\n    SELECT count(*) AS n FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND seen_on_caltopo_at >= $2::timestamptz\n       AND seen_on_tak_at     >= $2::timestamptz\n  ),\n  pair_update AS (\n    UPDATE public.sync_pairs\n       SET last_sync_at = now(),\n           last_result  = $3::jsonb\n     WHERE caltopo_map_id = $1\n       AND tak_mission_id = $4\n    RETURNING id\n  )\n  SELECT (SELECT count(*) FROM stale_delete) AS deleted_count,\n         (SELECT n FROM conflict_count)      AS conflict_count,\n         (SELECT count(*) FROM pair_update)  AS pair_updated;\n`;\nmsg.queryParameters = [\n    ctx.mapID,\n    ctx.runStartIso,\n    JSON.stringify(body),\n    ctx.takMission\n];\nmsg._responseBody = body;\nmsg._runCtxKey = 'run_' + correlationId;\nmsg._mapID = ctx.mapID;\nmsg._takMission = ctx.takMission;\nmsg.res = ctx.res;\nmsg.req = ctx.req;\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
@@ -274,7 +329,11 @@
         "libs": [],
         "x": 290,
         "y": 460,
-        "wires": [["cab1700300000008"]]
+        "wires": [
+            [
+                "cab1700300000008"
+            ]
+        ]
     },
     {
         "id": "cab1700300000008",
@@ -294,7 +353,11 @@
         "outputs": 1,
         "x": 680,
         "y": 460,
-        "wires": [["cab1700300000009"]]
+        "wires": [
+            [
+                "cab1700300000009"
+            ]
+        ]
     },
     {
         "id": "cab1700300000009",
@@ -310,7 +373,11 @@
         "libs": [],
         "x": 950,
         "y": 460,
-        "wires": [["cab170030000000a"]]
+        "wires": [
+            [
+                "cab170030000000a"
+            ]
+        ]
     },
     {
         "id": "cab170030000000a",
@@ -323,7 +390,6 @@
         "y": 460,
         "wires": []
     },
-
     {
         "id": "cab1700400000001",
         "type": "http in",
@@ -335,7 +401,11 @@
         "swaggerDoc": "",
         "x": 130,
         "y": 540,
-        "wires": [["cab1700400000002"]]
+        "wires": [
+            [
+                "cab1700400000002"
+            ]
+        ]
     },
     {
         "id": "cab1700400000002",
@@ -351,7 +421,11 @@
         "libs": [],
         "x": 360,
         "y": 540,
-        "wires": [["cab1700400000003"]]
+        "wires": [
+            [
+                "cab1700400000003"
+            ]
+        ]
     },
     {
         "id": "cab1700400000003",
@@ -371,7 +445,11 @@
         "outputs": 1,
         "x": 590,
         "y": 540,
-        "wires": [["cab1700400000004"]]
+        "wires": [
+            [
+                "cab1700400000004"
+            ]
+        ]
     },
     {
         "id": "cab1700400000004",
@@ -387,7 +465,11 @@
         "libs": [],
         "x": 820,
         "y": 540,
-        "wires": [["cab1700400000005"]]
+        "wires": [
+            [
+                "cab1700400000005"
+            ]
+        ]
     },
     {
         "id": "cab1700400000005",
@@ -400,7 +482,6 @@
         "y": 540,
         "wires": []
     },
-
     {
         "id": "cab1700500000001",
         "type": "http in",
@@ -412,7 +493,11 @@
         "swaggerDoc": "",
         "x": 130,
         "y": 600,
-        "wires": [["cab1700500000002"]]
+        "wires": [
+            [
+                "cab1700500000002"
+            ]
+        ]
     },
     {
         "id": "cab1700500000002",
@@ -428,7 +513,14 @@
         "libs": [],
         "x": 360,
         "y": 600,
-        "wires": [["cab1700500000003"], ["cab1700500000006"]]
+        "wires": [
+            [
+                "cab1700500000003"
+            ],
+            [
+                "cab1700500000006"
+            ]
+        ]
     },
     {
         "id": "cab1700500000003",
@@ -448,7 +540,11 @@
         "outputs": 1,
         "x": 590,
         "y": 600,
-        "wires": [["cab1700500000004"]]
+        "wires": [
+            [
+                "cab1700500000004"
+            ]
+        ]
     },
     {
         "id": "cab1700500000004",
@@ -464,7 +560,11 @@
         "libs": [],
         "x": 820,
         "y": 600,
-        "wires": [["cab1700500000005"]]
+        "wires": [
+            [
+                "cab1700500000005"
+            ]
+        ]
     },
     {
         "id": "cab1700500000005",
@@ -488,7 +588,6 @@
         "y": 660,
         "wires": []
     },
-
     {
         "id": "cab1700600000001",
         "type": "http in",
@@ -500,7 +599,11 @@
         "swaggerDoc": "",
         "x": 130,
         "y": 720,
-        "wires": [["cab1700600000002"]]
+        "wires": [
+            [
+                "cab1700600000002"
+            ]
+        ]
     },
     {
         "id": "cab1700600000002",
@@ -516,7 +619,14 @@
         "libs": [],
         "x": 360,
         "y": 720,
-        "wires": [["cab1700600000003"], ["cab1700600000006"]]
+        "wires": [
+            [
+                "cab1700600000003"
+            ],
+            [
+                "cab1700600000006"
+            ]
+        ]
     },
     {
         "id": "cab1700600000003",
@@ -536,7 +646,11 @@
         "outputs": 1,
         "x": 590,
         "y": 720,
-        "wires": [["cab1700600000004"]]
+        "wires": [
+            [
+                "cab1700600000004"
+            ]
+        ]
     },
     {
         "id": "cab1700600000004",
@@ -552,7 +666,11 @@
         "libs": [],
         "x": 820,
         "y": 720,
-        "wires": [["cab1700600000005"]]
+        "wires": [
+            [
+                "cab1700600000005"
+            ]
+        ]
     },
     {
         "id": "cab1700600000005",
@@ -576,7 +694,6 @@
         "y": 780,
         "wires": []
     },
-
     {
         "id": "cab1700700000001",
         "type": "http in",
@@ -588,25 +705,36 @@
         "swaggerDoc": "",
         "x": 130,
         "y": 880,
-        "wires": [["cab1700700000002"]]
+        "wires": [
+            [
+                "cab1700700000002"
+            ]
+        ]
     },
     {
         "id": "cab1700700000002",
         "type": "function",
         "z": "caa17000bb1cafe0",
         "name": "Sync health check",
-        "func": "/* jshint esversion: 8, node: true */\n// fs is provided by Setup -> Modules (libs)\n//\n// v1 synchronous health check. Replaces the prior async multi-branch design\n// which hung because the downstream Join used msg.topic as the key but both\n// branches set the same topic (correlationId) so count=2 was never reached.\n//\n// Sub-checks:\n//   caltopo_creds_ok  - both env vars set\n//   icon_configs_ok   - /data/icon-configs.json parses\n//   postgis_ok        - v1 no-op (returns true); /sync/pairs already exercises\n//                       postgres so a separate check adds no signal here\n//   tak_reachable     - v1 no-op (returns false); skipped to avoid 120s DNS\n//                       hangs against TAK_SERVER_URL with no VPN\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    const raw = fs.readFileSync('/data/icon-configs.json', 'utf8');\n    JSON.parse(raw);\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nmsg.payload = {\n    caltopo_creds_ok: credsOk,\n    postgis_ok: true,\n    icon_configs_ok: iconConfigsOk,\n    tak_reachable: false\n};\nmsg.statusCode = 200;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;\n",
+        "func": "/* jshint esversion: 8, node: true */\n// fs is provided by Setup -> Modules (libs).\n// https comes from settings.js functionGlobalContext.\n//\n// Single sync function that builds the /sync/health response. Returns a Promise\n// for the TAK reachability sub-check (3s timeout), so the overall endpoint\n// still resolves quickly even when TAK is down.\n//\n// Sub-checks:\n//   caltopo_creds_ok  - both env vars set\n//   icon_configs_ok   - /data/icon-configs.json parses\n//   postgis_ok        - v1 no-op (returns true); /sync/pairs already exercises\n//                       postgres so a separate check adds no signal here\n//   tak_reachable     - HEAD probe against https://TAK_SERVER_URL:TAK_HTTPS_API_PORT/\n//                       Any response (incl. 401/403/404) counts as reachable.\n//                       Only DNS failure or 3s timeout marks unreachable.\n\nconst https = global.get('https');\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    const raw = fs.readFileSync('/data/icon-configs.json', 'utf8');\n    JSON.parse(raw);\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nconst buildReply = (takOk) => {\n    msg.payload = {\n        caltopo_creds_ok: credsOk,\n        postgis_ok: true,\n        icon_configs_ok: iconConfigsOk,\n        tak_reachable: takOk\n    };\n    msg.statusCode = 200;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n};\n\nconst takHost = (env.get('TAK_SERVER_URL') || '').replace(/^https?:\\/\\//i, '');\nconst takPort = parseInt(env.get('TAK_HTTPS_API_PORT') || '8446', 10);\n\nif (!takHost || !https) {\n    return buildReply(false);\n}\n\nreturn new Promise((resolve) => {\n    let settled = false;\n    const finish = (ok) => { if (!settled) { settled = true; resolve(buildReply(ok)); } };\n    try {\n        const req = https.request({\n            hostname: takHost,\n            port: takPort,\n            path: '/',\n            method: 'HEAD',\n            timeout: 3000,\n            rejectUnauthorized: false\n        }, () => finish(true));\n        req.on('error', () => finish(false));\n        req.on('timeout', () => { try { req.destroy(); } catch (_) {} finish(false); });\n        req.end();\n    } catch (_) {\n        finish(false);\n    }\n});\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [
-            {"var": "fs", "module": "fs"}
+            {
+                "var": "fs",
+                "module": "fs"
+            }
         ],
         "x": 360,
         "y": 880,
-        "wires": [["cab170070000000b"]]
+        "wires": [
+            [
+                "cab170070000000b"
+            ]
+        ]
     },
     {
         "id": "cab170070000000b",
@@ -619,7 +747,6 @@
         "y": 880,
         "wires": []
     },
-
     {
         "id": "cab1700800000001",
         "type": "link out",
@@ -667,7 +794,11 @@
         "reg": false,
         "x": 1370,
         "y": 1690,
-        "wires": [["cab1700800000001"]]
+        "wires": [
+            [
+                "cab1700800000001"
+            ]
+        ]
     },
     {
         "id": "cab1700800000021",
@@ -690,9 +821,12 @@
         "reg": false,
         "x": 1530,
         "y": 1290,
-        "wires": [["cab1700800000002"]]
+        "wires": [
+            [
+                "cab1700800000002"
+            ]
+        ]
     },
-
     {
         "id": "sync04caltopoDebug",
         "type": "debug",
@@ -709,7 +843,11 @@
         "statusType": "auto",
         "x": 1370,
         "y": 1660,
-        "wires": [["cab1700800000020"]],
+        "wires": [
+            [
+                "cab1700800000020"
+            ]
+        ],
         "_comment_PATCH": "EXISTING NODE: wires was [] in upstream flows.json (no outputs). The bridge replaces with [[<target>]] to enable a single output that fans completion signals into the bridge. No existing wire targets to remove (original was empty)."
     },
     {
@@ -728,7 +866,11 @@
         "statusType": "auto",
         "x": 1530,
         "y": 1260,
-        "wires": [["cab1700800000021"]],
+        "wires": [
+            [
+                "cab1700800000021"
+            ]
+        ],
         "_comment_PATCH": "EXISTING NODE: wires was [] in upstream flows.json (no outputs). The bridge replaces with [[<target>]] to enable a single output that fans completion signals into the bridge. No existing wire targets to remove (original was empty)."
     }
 ]
