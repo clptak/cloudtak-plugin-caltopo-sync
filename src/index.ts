@@ -10,7 +10,7 @@ const MenuCaltopoSync = defineAsyncComponent(
 
 const MENU_KEY = 'caltopo-sync';
 const ROUTE_NAME = 'home-menu-caltopo-sync';
-const ROUTE_PATH = '/menu/caltopo-sync';
+const ROUTE_PATH = 'caltopo-sync';
 
 export default class CaltopoSyncPlugin implements PluginInstance {
     api: PluginAPI;
@@ -26,21 +26,21 @@ export default class CaltopoSyncPlugin implements PluginInstance {
             component: MenuCaltopoSync,
         }, 'home-menu');
 
-        api.menu.add({
-            key: MENU_KEY,
-            label: 'Caltopo Sync',
-            route: ROUTE_NAME,
-            tooltip: 'Caltopo ↔ TAK Mission Sync',
-            description: 'Pair Caltopo maps with TAK missions and sync features',
-            icon: markRaw(IconRouteAltRight),
-        });
-
         return new CaltopoSyncPlugin(api);
     }
 
     async enable(): Promise<void> {
         const store = useCaltopoSyncStore(this.api.pinia);
         store.setEnabled(true);
+
+        this.api.menu.add({
+            key: MENU_KEY,
+            label: 'Caltopo Sync',
+            route: ROUTE_NAME,
+            tooltip: 'Caltopo ↔ TAK Mission Sync',
+            description: 'Pair Caltopo maps with TAK missions and sync features',
+            icon: markRaw(IconRouteAltRight) as unknown as MenuItemIconType,
+        } as MenuItemConfig);
     }
 
     async disable(): Promise<void> {
@@ -49,5 +49,8 @@ export default class CaltopoSyncPlugin implements PluginInstance {
         this.api.menu.remove(MENU_KEY);
     }
 }
+
+type MenuItemIconType = NonNullable<Parameters<PluginAPI['menu']['add']>[0]['icon']>;
+type MenuItemConfig = Parameters<PluginAPI['menu']['add']>[0];
 
 export const _typecheck: PluginStatic = CaltopoSyncPlugin;
