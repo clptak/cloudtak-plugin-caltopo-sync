@@ -203,14 +203,19 @@ DELETE /sync/pairs/3
 
 ## 5. `GET /sync/health`
 
-Runs four sub-checks in parallel and returns booleans.
+Synchronous v1 check. Returns four booleans.
 
-| Field | Meaning |
+| Field | Meaning (v1) |
 |---|---|
 | `caltopo_creds_ok` | Both `CALTOPO_CREDENTIAL_ID` and `CALTOPO_CREDENTIAL_KEY` env vars are set |
-| `postgis_ok` | `SELECT PostGIS_Full_Version()` returned a row |
-| `icon_configs_ok` | `/data/icon-configs.json` exists and parses |
-| `tak_reachable` | An HTTP GET against `TAK_SERVER_URL` returned any HTTP status (≥1) |
+| `postgis_ok` | **v1 no-op — always `true`.** `/sync/pairs` already exercises the postgres path, so a dedicated check here adds no signal. A real `SELECT PostGIS_Full_Version()` probe will be reintroduced in v2 once we have a robust per-check timeout pattern. |
+| `icon_configs_ok` | `/data/icon-configs.json` exists and parses as JSON |
+| `tak_reachable` | **v1 no-op — always `false`.** Originally a live HTTP GET against `TAK_SERVER_URL`, but with no VPN that DNS lookup hangs for 120s. v2 will add a 3-second-timeout reachability probe. |
+
+The earlier async multi-branch design (postgres + http request + join) hung
+because the join was keyed on `msg.topic` and both branches carried the
+same correlationId, so `count: 2` was never reached. v1 replaces it with a
+single synchronous function node that returns in well under 100ms.
 
 ### Request
 
@@ -225,15 +230,15 @@ GET /sync/health
   "caltopo_creds_ok": true,
   "postgis_ok": true,
   "icon_configs_ok": true,
-  "tak_reachable": true
+  "tak_reachable": false
 }
 ```
 
-### Response 200 (degraded)
+### Response 200 (degraded — missing creds or icon config)
 
 ```json
 {
-  "caltopo_creds_ok": true,
+  "caltopo_creds_ok": false,
   "postgis_ok": true,
   "icon_configs_ok": false,
   "tak_reachable": false

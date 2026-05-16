@@ -14,10 +14,14 @@ End-to-end verification you drive yourself. The plugin and bridge subflow are st
 
 ### 1. Apply the PostGIS migration
 
+First confirm the postgres service name in your compose file (`docker-compose config --services` lists them). In `node-red-sarops-docker`, the service is `db` (container `postgis-db`):
+
 ```bash
-docker compose -f /Users/paulclifton/node-red-sarops-docker/docker-compose.yml exec postgres \
-  psql -U <your_user> -d <your_db> < /Users/paulclifton/dev/cloudtak-plugin-caltopo-sync/nodered/migration.sql
+docker-compose -f /Users/paulclifton/node-red-sarops-docker/docker-compose.yml exec -T db \
+  psql -U nodered -d spatial_data < /Users/paulclifton/dev/cloudtak-plugin-caltopo-sync/nodered/migration.sql
 ```
+
+`-T` disables TTY allocation so the stdin redirect works.
 
 **Expected:** `CREATE TABLE` on first run, `NOTICE: relation "sync_pairs" already exists, skipping` on re-run. No error.
 
