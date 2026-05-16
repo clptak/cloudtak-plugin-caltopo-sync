@@ -182,8 +182,8 @@ import {
     IconRefresh,
     IconTrash,
 } from '@tabler/icons-vue';
-import Subscription from '../../../src/base/subscription.ts';
-import type { Mission, MissionLayerList } from '../../../src/types.ts';
+import Subscription from '@/base/subscription.ts';
+import type { Mission, MissionLayerList } from '@/types.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,

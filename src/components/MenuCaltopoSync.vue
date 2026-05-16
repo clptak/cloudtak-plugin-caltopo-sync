@@ -34,7 +34,7 @@ import {
     IconCircleX,
     IconRefresh,
 } from '@tabler/icons-vue';
-import MenuTemplate from '../../../src/components/CloudTAK/util/MenuTemplate.vue';
+import MenuTemplate from '@/components/CloudTAK/util/MenuTemplate.vue';
 import SettingsPanel from './SettingsPanel.vue';
 import PairManager from './PairManager.vue';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
