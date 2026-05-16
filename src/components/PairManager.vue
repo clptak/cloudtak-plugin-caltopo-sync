@@ -138,8 +138,12 @@
                                         <IconRefresh
                                             :size='16'
                                             stroke='1'
+                                            :class='syncingId === pair.id ? "spin-animation" : ""'
                                         />
-                                        <span class='ms-1'>Sync Now</span>
+                                        <span
+                                            class='ms-1'
+                                            v-text='syncingId === pair.id ? "Syncing… (up to 30s)" : "Sync Now"'
+                                        />
                                     </button>
                                     <button
                                         type='button'
@@ -355,3 +359,13 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
 }
 
 </script>
+
+<style scoped>
+.spin-animation {
+    animation: caltopo-sync-spin 1s linear infinite;
+}
+@keyframes caltopo-sync-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
