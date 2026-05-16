@@ -60,6 +60,24 @@
                 />
             </div>
             <div
+                v-if='result._signal?.caltopo_synthetic || result._signal?.tak_synthetic'
+                class='mt-3 alert alert-warning mb-0'
+            >
+                <div class='d-flex align-items-center'>
+                    <IconInfoCircle
+                        :size='18'
+                        stroke='1'
+                    />
+                    <span class='ms-2'>
+                        Best-effort completion: no terminal signal received from
+                        <span v-if='result._signal?.caltopo_synthetic'>Caltopo</span>
+                        <span v-if='result._signal?.caltopo_synthetic && result._signal?.tak_synthetic'> and </span>
+                        <span v-if='result._signal?.tak_synthetic'>TAK</span>
+                        direction (likely empty side). Counts are derived rather than transactional.
+                    </span>
+                </div>
+            </div>
+            <div
                 v-if='result.errors.length'
                 class='mt-3'
             >
@@ -98,7 +116,7 @@
 
 <script setup lang='ts'>
 import { TablerModal } from '@tak-ps/vue-tabler';
-import { IconClock, IconAlertTriangle } from '@tabler/icons-vue';
+import { IconClock, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-vue';
 import type { PropType } from 'vue';
 import type { SyncResult } from '../types.ts';
 

@@ -19,6 +19,10 @@ export interface SyncResult {
     conflicts: number;
     duration_ms: number;
     errors: string[];
+    _signal?: {
+        caltopo_synthetic?: boolean;
+        tak_synthetic?: boolean;
+    };
 }
 
 export interface HealthCheck {

@@ -59,14 +59,23 @@ npm run serve   # Vite HMR; restart once after first symlink so the glob picks u
 
 `scripts/dev-link.sh` creates `<CloudTAK>/api/web/plugins/caltopo-sync` as a symlink to this repo's `src/`. Idempotent — safe to re-run.
 
-To typecheck or lint in this repo:
+To lint in this repo (full coverage, runs standalone):
 
 ```bash
-npm run check     # vue-tsc --noEmit
 npm run lint      # eslint src
 ```
 
-`@tak-ps/cloudtak` is consumed as a peer dep (types only). For local typecheck, the `devDependency` resolves it to `../../CloudTAK/api/web` — adjust if your checkout lives elsewhere.
+For full type verification, the plugin must be symlinked into the host first — its components import host internals via `../../../src/...` paths that only resolve when the source lives at `host/api/web/plugins/caltopo-sync/`. The production typecheck path is:
+
+```bash
+bash scripts/dev-link.sh /path/to/CloudTAK
+cd /path/to/CloudTAK/api/web
+npm run check     # host's vue-tsc, sees the symlinked plugin
+```
+
+`npm run check` in this repo (standalone) catches in-source bugs but reports cross-host imports as missing modules — that's expected and not a defect. The Vite dev server (`npm run serve` in the host) is the canonical compile-time check.
+
+`@tak-ps/cloudtak` is a peer dep (types only). The `devDependency` `file:../../CloudTAK/api/web` is for IDE convenience; if your checkout lives elsewhere, edit the path in `package.json`.
 
 ## Node-RED side — environment variables
 
