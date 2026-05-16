@@ -183,7 +183,6 @@ The PostGIS migrations are additive (CREATE TABLE IF NOT EXISTS); leaving the ta
 
 These are documented in [`nodered/README.md`](../nodered/README.md) under "Known issues" — see there for full detail. Brief recap so operators aren't surprised:
 
-- **Sync result modal often reports `_signal: { caltopo_synthetic: true, tak_synthetic: true }` with `added: 0`** even when work happens. The legacy engine IS doing the work; the bridge just can't observe completion finely enough to report accurate counts. Verify success by checking the TAK mission directly or `SELECT max(updated_at) FROM caltopo_maps WHERE map_id='<map>'`. v1.1 will fix the terminal-signal delivery.
 - **CloudTAK shows white dots** instead of the proper marker icons when an iconset referenced by `caltopoToTak` isn't uploaded into CloudTAK's iconset library. ATAK and TAK Aware render correctly because they fetch iconsets from TAK Server directly. Upload missing iconsets in step 6 above.
 - **Occasional postgres deadlock** when the two sync directions race for the same `(map_id, feature_id)` row. Manifests as a missing sync run; next click recovers. Solved in v1.2 with retry-on-deadlock around the UPSERT.
 

@@ -186,16 +186,6 @@ its own nodes (the legacy flow's logic is untouched):
 
 ### Bridge / plugin scope
 
-- **Cosmetic — synthetic completion signal default.** The terminal-node →
-  bridge link-in delivery isn't always firing, so most syncs hit the 30s
-  safety timeout and the modal reports
-  `_signal.{caltopo,tak}_synthetic: true` with `added: 0`. The legacy
-  engine IS doing real work (verifiable by `SELECT max(updated_at)
-  FROM caltopo_maps WHERE map_id=…` before/after — the timestamp
-  advances). The stale-delete safety gate prevents data loss here, but
-  the modal numbers are best-effort, not transactional. v1.1 should
-  add diagnostic node.warn() calls into the link-out paths to find
-  why some terminal signals get dropped.
 - **TAK reachability probe uses 3s timeout.** If your TAK responds to
   HEAD slower than 3s, the Health tab shows red even though sync would
   work. Adjust the timeout in the `Sync health check` function if needed.

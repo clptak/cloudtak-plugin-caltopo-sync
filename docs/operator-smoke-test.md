@@ -157,7 +157,6 @@ I'll triage from there.
 
 ## Known v1 caveats (not bugs to report)
 
-- **Synthetic-signal default.** The terminal-node → bridge link-in delivery is not always firing reliably, so most syncs hit the 30s safety timeout and the modal reports `_signal.{caltopo,tak}_synthetic: true` with `added: 0`. The legacy engine IS doing real work (verify by `SELECT max(updated_at) FROM caltopo_maps WHERE map_id=…` before/after — the timestamp advances). This is cosmetic for v1; the modal counts are best-effort, not transactional. Tracked for v1.1.
 - 3-second per-direction idle debounce — pathologically slow syncs (>3s between feature writes) may close a direction prematurely; backstopped by the 30s overall timeout.
 - Empty Caltopo map or empty mission → that direction returns synthetic-signal flag `true` in the response.
 - No retry on transient Caltopo API errors — surfaced as `errors[]`; user re-clicks Sync Now.
