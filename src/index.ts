@@ -1,7 +1,7 @@
 import type { App } from 'vue';
 import { defineAsyncComponent, markRaw } from 'vue';
 import type { PluginAPI, PluginInstance, PluginStatic } from '@tak-ps/cloudtak';
-import { IconRouteAltRight } from '@tabler/icons-vue';
+import SartopoCloudtakIcon from './components/SartopoCloudtakIcon.vue';
 import { useCaltopoSyncStore } from './stores/plugin-state.ts';
 
 const MenuCaltopoSync = defineAsyncComponent(
@@ -39,7 +39,7 @@ export default class CaltopoSyncPlugin implements PluginInstance {
             route: ROUTE_NAME,
             tooltip: 'Caltopo ↔ TAK Mission Sync',
             description: 'Pair Caltopo maps with TAK missions and sync features',
-            icon: markRaw(IconRouteAltRight) as unknown as MenuItemIconType,
+            icon: markRaw(SartopoCloudtakIcon) as unknown as MenuItemIconType,
         } as MenuItemConfig);
     }
 
