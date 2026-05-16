@@ -80,6 +80,18 @@ psql "$DATABASE_URL" -f migration.sql
    map the postgres-config; pick your existing postgres config from the
    dropdown.
 5. Click **Deploy**.
+6. **Apply post-import wire patches** — Node-RED's import dialog won't
+   modify the `wires` array of existing nodes even when you pick
+   "replace". Three wires need to be appended manually. Run the patch
+   script that ships in this repo:
+
+   ```bash
+   python3 nodered/scripts/post-import-patch.py /path/to/your/flows.json
+   docker restart <your-nodered-container>
+   ```
+
+   Idempotent — re-running it after the patches are in is a no-op. See
+   the script header for what it does and why each patch is needed.
 
 ## Verification
 
@@ -169,3 +181,48 @@ its own nodes (the legacy flow's logic is untouched):
 
 - `postgresdb` id `0401336095afd0b1` — defined at
   `node-red-sarops-docker/data/projects/test_nr_project/flows.json:2767`.
+
+## Known issues (v1.0)
+
+### Bridge / plugin scope
+
+- **Cosmetic — synthetic completion signal default.** The terminal-node →
+  bridge link-in delivery isn't always firing, so most syncs hit the 30s
+  safety timeout and the modal reports
+  `_signal.{caltopo,tak}_synthetic: true` with `added: 0`. The legacy
+  engine IS doing real work (verifiable by `SELECT max(updated_at)
+  FROM caltopo_maps WHERE map_id=…` before/after — the timestamp
+  advances). The stale-delete safety gate prevents data loss here, but
+  the modal numbers are best-effort, not transactional. v1.1 should
+  add diagnostic node.warn() calls into the link-out paths to find
+  why some terminal signals get dropped.
+- **TAK reachability probe uses 3s timeout.** If your TAK responds to
+  HEAD slower than 3s, the Health tab shows red even though sync would
+  work. Adjust the timeout in the `Sync health check` function if needed.
+- **TAK_MISSIONS cache must be populated** before pair creation. The
+  bridge translates the plugin's GUID to a TAK-server-side name via
+  `global.TAK_MISSIONS`. If the lookup is empty/stale, sync returns 400
+  with a clear "refresh via the Get Mission List inject node" error.
+  Operators need to remember to re-fire that inject when missions are
+  added to TAK.
+
+### Legacy `node-red-sarops-docker` engine bugs (out of scope)
+
+These reproduce identically when calling `GET /api/CalTAKsync` directly,
+zero bridge involvement. The plugin can't fix them; they need a separate
+pass on the legacy flow code:
+
+- **CoT parse failures on features missing `_attributes`.** TAK→Caltopo
+  direction drops features whose `/event/detail/usericon` element lacks
+  the `_attributes` property. Observable in `docker logs my-nodered` as
+  `[warn] [function:CoT batch → GeoJSON features] CoT parse failed: must
+  have required property '_attributes'`. Operator-observed: some TAK
+  polygons don't make it to Caltopo.
+- **Caltopo→TAK polygon push gaps.** Operator-observed during smoke
+  testing; needs a separate pass on the Caltopo→TAK direction nodes in
+  the legacy flow.
+- **CloudTAK vs TAK Server mission name divergence.** CloudTAK surfaces
+  missions with a display name that doesn't match what TAK Server's
+  mission-list API returns. The bridge handles this via reverse-lookup
+  in `global.TAK_MISSIONS`; no fix needed unless a mission's name
+  contains characters that defeat the lookup.
