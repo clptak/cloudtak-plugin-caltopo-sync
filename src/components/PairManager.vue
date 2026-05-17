@@ -244,9 +244,21 @@ async function fetchPairs() {
     pairsLoading.value = true;
     listError.value = undefined;
     try {
-        pairs.value = await listPairs();
+        const data = await listPairs();
+        // Defensive: if the bridge returns a malformed body (e.g. a single
+        // object instead of an array) don't propagate the bad shape into a
+        // template render — surface as an error and keep pairs as []
+        if (!Array.isArray(data)) {
+            throw new Error(
+                'Node-RED /sync/pairs returned a non-array body. ' +
+                'Run nodered/scripts/sync-bridge-functions.py against your live ' +
+                'flows.json and restart Node-RED.'
+            );
+        }
+        pairs.value = data;
     } catch (err) {
         listError.value = err instanceof Error ? err : new Error(String(err));
+        pairs.value = [];
     } finally {
         pairsLoading.value = false;
     }
@@ -274,7 +286,7 @@ async function submit() {
             tak_mission_id: form.value.tak_mission_id,
             label: form.value.label.trim() || undefined,
         });
-        pairs.value = [...pairs.value, created];
+        pairs.value = [...(Array.isArray(pairs.value) ? pairs.value : []), created];
         form.value = { caltopo_map_id: '', tak_mission_id: '', label: '' };
     } catch (err) {
         formError.value = err instanceof Error ? err : new Error(String(err));
