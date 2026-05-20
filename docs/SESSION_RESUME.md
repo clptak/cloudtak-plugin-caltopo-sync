@@ -6,7 +6,7 @@ A "you're picking this back up cold" snapshot. Read this before doing anything i
 
 | Part | Version | Status |
 |---|---|---|
-| `cloudtak-plugin-caltopo-sync` | **v1.0.4** | Working. Plugin UI in CloudTAK + bridge subflow in Node-RED. |
+| `cloudtak-plugin-caltopo-sync` | **v1.0.5** | Working. Plugin UI in CloudTAK + bridge subflow in Node-RED. |
 | `node-red-caltopo-tak-sync` | **v1.0.1** | Working. The Caltopo↔TAK sync engine extracted from `node-red-sarops-docker`. |
 | `node-red-sarops-docker` | (your existing) | Hosts the live engine + bridge. The flow files there are what actually runs. |
 | Live dev runtime | matches above | All three sync scripts say "no changes — already in sync". |
@@ -40,6 +40,18 @@ The bridge's join couldn't confirm both sync directions finished within 30s. **L
 
 ### `"stale-delete skipped: both directions synthetic; cannot determine staleness"`
 Safety guard: when BOTH directions came back synthetic, the bridge refuses to run the stale-delete SQL because it can't tell which rows are genuinely stale vs just-not-observed. **This protects against the data-loss bug that hit you mid-session** (where a misfiring run would nuke every row in `caltopo_maps` for the target map_id). Seeing this means the guard saved you from a wipe; not a failure.
+
+### Symptom: every `/sync/run` returns 30s timeout + BOTH directions synthetic, and `/sync/pairs` shows `last_sync_at: null` even after retries
+**The bridge trigger wire to the legacy fan-out has been lost.** A Node-RED UI Deploy that edits a function node on the `8d455e872c814fd3` (Caltopo <-> TAK) tab can silently drop the trigger → `a075cdac694b8631` fan-out wire. The bridge accepts the request, does no work, falls back to synthetic, returns. Verified 2026-05-20 — happened after editing a function-node body unrelated to the bridge.
+
+**Fix:**
+```bash
+python3 cloudtak-plugin-caltopo-sync/nodered/scripts/post-import-patch.py \
+  /Users/paulclifton/node-red-sarops-docker/data/projects/test_nr_project/flows.json
+docker restart my-nodered
+# Then wait for /sync/health to come back and re-run /sync/run.
+```
+Read-only pre-check (no edits): the script will print "No changes — flows.json already patched." if the wire is intact.
 
 ### `"N caltopo-direction HTTP errors"` or `"N tak-direction HTTP errors"`
 N per-feature POST/PUT requests returned 4xx/5xx. **Look at `error_details[]` in the response body** — each entry has `{direction, uid, status, body}`. Common causes:
@@ -101,7 +113,8 @@ Do:
 - After any change to the engine via the Node-RED UI, restart `my-nodered` AND verify with `curl http://localhost:1880/sync/health`.
 - After any change to the bridge code in this repo, run `sync-bridge-functions.py` and restart.
 - Re-run `post-import-patch.py` after any UI re-import or any time Node-RED's editor save might have reset the wires.
-- Pin specific tags when deploying to prod (`v1.0.4` plugin, `v1.0.1` engine).
+- After ANY UI Deploy that touched a function node on the Caltopo <-> TAK tab — even one unrelated to the bridge — re-run `post-import-patch.py`. Cheap, idempotent, prevents the silent-bridge-broken state.
+- Pin specific tags when deploying to prod (`v1.0.5` plugin, `v1.0.1` engine).
 
 ## Key file paths
 
