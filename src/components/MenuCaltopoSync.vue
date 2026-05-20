@@ -40,12 +40,12 @@ import PairManager from './PairManager.vue';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import { health } from '../api/nodered-client.ts';
 
-const activeTab = ref<string>('settings');
+const activeTab = ref<string>('pairs');
 
 const tabs = [
-    { value: 'settings', label: 'Settings' },
     { value: 'pairs', label: 'Pairs' },
     { value: 'health', label: 'Health' },
+    { value: 'settings', label: 'Settings' },
 ];
 
 const tabIcons: Record<string, Component> = {
