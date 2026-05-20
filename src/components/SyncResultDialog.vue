@@ -78,7 +78,7 @@
                 </div>
             </div>
             <div
-                v-if='result.errors.length'
+                v-if='displayErrors.length'
                 class='mt-3'
             >
                 <div class='subheader mb-2'>
@@ -86,7 +86,7 @@
                 </div>
                 <ul class='list-unstyled mb-0'>
                     <li
-                        v-for='(err, idx) in result.errors'
+                        v-for='(err, idx) in displayErrors'
                         :key='idx'
                         class='text-danger'
                     >
@@ -115,12 +115,13 @@
 </template>
 
 <script setup lang='ts'>
+import { computed } from 'vue';
 import { TablerModal } from '@tak-ps/vue-tabler';
 import { IconClock, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-vue';
 import type { PropType } from 'vue';
 import type { SyncResult } from '../types.ts';
 
-defineProps({
+const props = defineProps({
     result: {
         type: Object as PropType<SyncResult>,
         required: true,
@@ -130,4 +131,19 @@ defineProps({
 defineEmits<{
     (e: 'close'): void;
 }>();
+
+// When the "Best-effort completion" banner is visible, these messages are
+// the cause of (or safety guard for) the synthetic state shown by the
+// banner. Showing them again as red errors duplicates the signal.
+const SUPPRESSED_WHEN_SYNTHETIC = [
+    'overall safety timeout',
+    'stale-delete skipped: both directions synthetic',
+];
+
+const displayErrors = computed(() => {
+    const errors = props.result.errors || [];
+    const synthetic = !!(props.result._signal?.caltopo_synthetic || props.result._signal?.tak_synthetic);
+    if (!synthetic) return errors;
+    return errors.filter(err => !SUPPRESSED_WHEN_SYNTHETIC.some(p => err.includes(p)));
+});
 </script>
