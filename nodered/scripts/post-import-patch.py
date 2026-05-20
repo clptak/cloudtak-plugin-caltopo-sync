@@ -6,18 +6,22 @@ of existing nodes when an imported flow tries to. The bridge subflow
 needs three wire additions on existing legacy nodes that Import can't
 apply on its own. This script applies them surgically and idempotently.
 
-The three additions:
+The patched wires:
 
-1. Bridge trigger fn output 0 -> legacy fan-out `a075cdac694b8631`
-   Without this, /sync/run does no work but still runs the stale-delete,
-   silently destroying caltopo_maps rows for the target map_id.
-
-2. `sync03caltopoHttp.wires[0]` += [<caltopo stamp id from bridge>]
-3. `sync08takHttp.wires[0]`    += [<tak stamp id from bridge>]
+1. `sync03caltopoHttp.wires[0]` += [<caltopo stamp id from bridge>]
+2. `sync08takHttp.wires[0]`    += [<tak stamp id from bridge>]
    These deliver per-feature completion signals from each direction's
    HTTP request response into the bridge's join. WITHOUT them, the
    bridge never observes completion and always falls back to the 30s
    safety timeout, reporting synthetic counts.
+
+NOTE: The third historical patch — `trigger output 0 -> a075cdac694b8631` —
+was a CROSS-TAB direct wire that Node-RED's editor silently stripped on
+every Deploy touching the Bridge tab (confirmed twice on 2026-05-20).
+That patch is now obsolete. The trigger -> fan-out connection is provided
+by the `link out` / `link in` pair set up by `migrate-to-link-nodes.py`,
+which is Deploy-safe. If `/sync/run` still returns 30s synthetic with
+last_sync_at: null, run `migrate-to-link-nodes.py` first, not this script.
 
 NOTE: prior versions of this script patched sync04caltopoDebug /
 sync09takDebug instead. Those are TYPE=DEBUG nodes — they have no
@@ -34,9 +38,7 @@ import json
 import sys
 from pathlib import Path
 
-LEGACY_FANOUT       = "a075cdac694b8631"
 LEGACY_TAB          = "8d455e872c814fd3"  # Caltopo <-> TAK
-TRIGGER_NAME        = "Validate + concurrency-gate + trigger legacy fan-out"
 CALTOPO_STAMP_NAME  = "stamp _completionDirection=caltopo"
 TAK_STAMP_NAME      = "stamp _completionDirection=tak"
 CALTOPO_HTTP_ID     = "sync03caltopoHttp"  # POST to Caltopo (upstream of sync04caltopoDebug)
@@ -64,14 +66,12 @@ def main() -> int:
                 return n
         return None
 
-    trigger = find(lambda n: n.get("name") == TRIGGER_NAME and n.get("type") == "function")
     caltopo_stamp = find(lambda n: n.get("name") == CALTOPO_STAMP_NAME and n.get("z") == LEGACY_TAB)
     tak_stamp = find(lambda n: n.get("name") == TAK_STAMP_NAME and n.get("z") == LEGACY_TAB)
     caltopo_http = find(lambda n: n.get("id") == CALTOPO_HTTP_ID)
     tak_http = find(lambda n: n.get("id") == TAK_HTTP_ID)
 
     missing = [name for n, name in [
-        (trigger, TRIGGER_NAME),
         (caltopo_stamp, CALTOPO_STAMP_NAME),
         (tak_stamp, TAK_STAMP_NAME),
         (caltopo_http, CALTOPO_HTTP_ID),
@@ -86,13 +86,6 @@ def main() -> int:
         return 1
 
     changes = []
-
-    # Trigger output 0 -> legacy fan-out
-    while len(trigger["wires"]) < 3:
-        trigger["wires"].append([])
-    if LEGACY_FANOUT not in trigger["wires"][0]:
-        trigger["wires"][0].append(LEGACY_FANOUT)
-        changes.append(f"trigger output 0 += [{LEGACY_FANOUT}]")
 
     # sync03caltopoHttp output 0 -> caltopo stamp
     if not caltopo_http.get("wires"):
