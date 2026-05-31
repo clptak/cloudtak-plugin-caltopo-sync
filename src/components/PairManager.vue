@@ -141,15 +141,34 @@
                 <button
                     type='button'
                     class='btn btn-primary'
-                    :disabled='creatingMap'
-                    @click='createCaltopoMap'
+                    :disabled='creatingMap || !canCreateMap'
+                    @click='createCaltopoMapHandler'
                 >
                     <IconMap
                         :size='18'
                         stroke='1'
                     />
-                    <span class='ms-2'>Create Caltopo Map</span>
+                    <span class='ms-2'>{{ creatingMap ? 'Creating…' : 'Create Caltopo Map' }}</span>
                 </button>
+                <div
+                    v-if='!activeMissionName'
+                    class='text-muted small mt-2'
+                >
+                    Set a DataSync as the Active DataSync to enable map creation.
+                </div>
+                <TablerAlert
+                    v-if='createMapError'
+                    class='mt-3'
+                    :err='createMapError'
+                />
+                <div
+                    v-if='createdMapId'
+                    class='alert alert-success mt-3 mb-0'
+                >
+                    Created Caltopo map
+                    <code v-text='createdMapId' />
+                    — map ID copied into the Add Pair form above.
+                </div>
                 <p class='text-muted small mt-3 mb-0'>
                     This creates a map with Map Share settings at URL. Please remember to change it
                     to a higher level of security when the mission is no longer active.
@@ -342,6 +361,8 @@ import {
 } from '@tabler/icons-vue';
 import Subscription from '../../../src/base/subscription.ts';
 import type { Mission, MissionLayerList } from '../../../src/types.ts';
+import { useMapStore } from '../../../src/stores/map.ts';
+import ProfileConfig from '../../../src/base/profile.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,
@@ -349,10 +370,13 @@ import {
     deletePair,
     runSync,
 } from '../api/nodered-client.ts';
+import { buildCreateMapBody, createCaltopoMap } from '../api/caltopo-client.ts';
+import { parseCoordinates } from '../lib/coordinates.ts';
 import type { Pair, SyncResult, CaltopoMapOption } from '../types.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
 
 const store = useCaltopoSyncStore();
+const mapStore = useMapStore();
 
 const pairs = ref<Pair[]>([]);
 const pairsLoading = ref(false);
@@ -373,17 +397,95 @@ function onCaltopoMapSelected() {
     }
 }
 
-// "Create Caltopo Map" accordion — collapsed by default. The actual creation
-// request is wired separately; this only captures the inputs for now.
+// "Create Caltopo Map" accordion — collapsed by default. Builds the map-create
+// body from the entered coordinates + DR/Activity number, signs it, and POSTs
+// directly to CalTopo using the credentials saved in Settings.
 const createMapOpen = ref(false);
 const creatingMap = ref(false);
 const createMapForm = ref<{ call_location: string; dr_or_activity: string }>({
     call_location: '',
     dr_or_activity: '',
 });
+const createMapError = ref<Error | undefined>();
+const createdMapId = ref<string>('');
 
-function createCaltopoMap() {
-    // Placeholder: submits a create-map request to be implemented later.
+// The map is titled after the Active DataSync; require one to be active.
+const activeMissionName = computed<string>(() => mapStore.mission?.meta.name ?? '');
+
+const canCreateMap = computed<boolean>(() => {
+    return !!activeMissionName.value
+        && createMapForm.value.call_location.trim() !== ''
+        && createMapForm.value.dr_or_activity.trim() !== '';
+});
+
+async function resolveUsername(): Promise<string> {
+    try {
+        const cfg = await ProfileConfig.get('username');
+        if (cfg && cfg.value) return String(cfg.value);
+    } catch {
+        // ignore; fall through to network fetch
+    }
+    try {
+        const profile = await ProfileConfig.fetch();
+        if (profile && profile.username) return String(profile.username);
+    } catch {
+        // ignore; no username available
+    }
+    return '';
+}
+
+async function createCaltopoMapHandler() {
+    createMapError.value = undefined;
+    createdMapId.value = '';
+
+    const missionName = activeMissionName.value;
+    if (!missionName) {
+        createMapError.value = new Error('No Active DataSync. Set a DataSync as active first.');
+        return;
+    }
+
+    // PairManager doesn't load credentials on mount — pull the per-user
+    // settings now so a fresh visit to this tab still has them.
+    const username = await resolveUsername();
+    const creds = store.loadCaltopoSettings(username);
+    if (!creds.credentialId.trim() || !creds.credentialKey.trim() || !creds.accountId.trim()) {
+        createMapError.value = new Error('Caltopo credentials are incomplete. Fill them in the Settings tab.');
+        return;
+    }
+
+    let lat: number;
+    let lon: number;
+    try {
+        const parsed = parseCoordinates({ coordinates: createMapForm.value.call_location.trim() });
+        lat = parsed.lat;
+        lon = parsed.lon;
+    } catch (err) {
+        createMapError.value = err instanceof Error ? err : new Error(String(err));
+        return;
+    }
+
+    creatingMap.value = true;
+    try {
+        const payload = buildCreateMapBody({
+            missionName,
+            drOrActivity: createMapForm.value.dr_or_activity.trim(),
+            lat,
+            lon,
+        });
+        const result = await createCaltopoMap({
+            accountId: creds.accountId.trim(),
+            credentialId: creds.credentialId.trim(),
+            credentialKey: creds.credentialKey.trim(),
+            payload,
+        });
+        createdMapId.value = result.id;
+        // Pre-fill the Add Pair form with the freshly created map id.
+        form.value.caltopo_map_id = result.id;
+    } catch (err) {
+        createMapError.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+        creatingMap.value = false;
+    }
 }
 
 const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string }>({

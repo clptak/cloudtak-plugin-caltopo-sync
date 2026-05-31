@@ -52,3 +52,33 @@ export interface CaltopoMapOption {
     id: string;
     name: string;
 }
+
+// Minimal GeoJSON shapes used when constructing the CalTopo map-create body.
+export interface CaltopoFeature {
+    type: 'Feature';
+    geometry: {
+        type: 'Point';
+        coordinates: [number, number];
+    };
+    properties: Record<string, unknown>;
+}
+
+export interface CaltopoCreateMapPayload {
+    properties: {
+        title: string;
+        mode: string;
+        mapConfig: string;
+        sharing: string;
+    };
+    state: {
+        type: 'FeatureCollection';
+        features: CaltopoFeature[];
+    };
+}
+
+// CalTopo's create-map response. The new map id lives under `result.id`
+// (e.g. "ABCD1"); we keep the raw payload around for diagnostics.
+export interface CaltopoCreateMapResult {
+    id: string;
+    raw: unknown;
+}
