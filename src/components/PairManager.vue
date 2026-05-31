@@ -128,7 +128,7 @@
                                 >Never</span>
                             </td>
                             <td class='text-end'>
-                                <div class='btn-list justify-content-end'>
+                                <div class='btn-list justify-content-end align-items-center flex-wrap'>
                                     <button
                                         type='button'
                                         class='btn btn-sm btn-primary'
@@ -145,6 +145,47 @@
                                             v-text='syncingId === pair.id ? "Syncing… (up to 30s)" : "Sync Now"'
                                         />
                                     </button>
+                                    <div
+                                        class='input-group input-group-sm'
+                                        style='width: 180px'
+                                        v-tooltip='`Auto-sync every N seconds (min ${AUTO_SYNC_MIN_SECONDS}s). Skips ticks while a previous run is still in flight.`'
+                                    >
+                                        <span class='input-group-text'>Every</span>
+                                        <input
+                                            type='number'
+                                            class='form-control'
+                                            :min='AUTO_SYNC_MIN_SECONDS'
+                                            step='5'
+                                            :value='intervalDraft[pair.id] ?? store.autoSyncIntervalByPair[pair.id] ?? AUTO_SYNC_MIN_SECONDS'
+                                            :disabled='store.isAutoSyncing(pair.id)'
+                                            @input='onIntervalInput(pair.id, ($event.target as HTMLInputElement).value)'
+                                        />
+                                        <span class='input-group-text'>s</span>
+                                        <button
+                                            v-if='!store.isAutoSyncing(pair.id)'
+                                            type='button'
+                                            class='btn btn-success'
+                                            @click='startAuto(pair)'
+                                        >
+                                            <IconPlayerPlay
+                                                :size='14'
+                                                stroke='1'
+                                            />
+                                            <span class='ms-1'>Start</span>
+                                        </button>
+                                        <button
+                                            v-else
+                                            type='button'
+                                            class='btn btn-warning'
+                                            @click='store.stopAutoSync(pair.id)'
+                                        >
+                                            <IconPlayerStop
+                                                :size='14'
+                                                stroke='1'
+                                            />
+                                            <span class='ms-1'>Stop</span>
+                                        </button>
+                                    </div>
                                     <button
                                         type='button'
                                         class='btn btn-sm btn-outline-danger'
@@ -156,6 +197,20 @@
                                             stroke='1'
                                         />
                                     </button>
+                                </div>
+                                <div
+                                    v-if='store.isAutoSyncing(pair.id)'
+                                    class='text-muted small mt-1'
+                                >
+                                    <IconRefresh
+                                        :size='12'
+                                        stroke='1'
+                                        :class='store.autoSyncInFlight[pair.id] ? "spin-animation" : ""'
+                                    />
+                                    <span
+                                        class='ms-1'
+                                        v-text='store.autoSyncInFlight[pair.id] ? "syncing now…" : "auto-sync running"'
+                                    />
                                 </div>
                             </td>
                         </tr>
@@ -185,6 +240,8 @@ import {
     IconPlus,
     IconRefresh,
     IconTrash,
+    IconPlayerPlay,
+    IconPlayerStop,
 } from '@tabler/icons-vue';
 import Subscription from '@/base/subscription.ts';
 import type { Mission, MissionLayerList } from '@/types.ts';
@@ -218,6 +275,26 @@ const formError = ref<Error | undefined>();
 const syncingId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
 const dialogResult = ref<SyncResult | null>(null);
+
+const AUTO_SYNC_MIN_SECONDS = 30;
+const intervalDraft = ref<Record<number, number>>({});
+
+function onIntervalInput(pairId: number, raw: string) {
+    const n = parseInt(raw, 10);
+    intervalDraft.value = {
+        ...intervalDraft.value,
+        [pairId]: Number.isFinite(n) ? n : AUTO_SYNC_MIN_SECONDS,
+    };
+}
+
+function startAuto(pair: Pair) {
+    const candidate = intervalDraft.value[pair.id] ?? store.autoSyncIntervalByPair[pair.id] ?? AUTO_SYNC_MIN_SECONDS;
+    const interval = Math.max(AUTO_SYNC_MIN_SECONDS, Math.floor(candidate));
+    if (interval !== candidate) {
+        intervalDraft.value = { ...intervalDraft.value, [pair.id]: interval };
+    }
+    store.startAutoSync(pair, interval);
+}
 
 const canSubmit = computed(() => {
     return form.value.caltopo_map_id.trim() !== '' && form.value.tak_mission_id !== '';
@@ -320,6 +397,7 @@ async function remove(pair: Pair) {
     if (!confirm(`Delete pair ${pair.label || pair.caltopo_map_id}?`)) return;
     deletingId.value = pair.id;
     try {
+        store.stopAutoSync(pair.id);
         await removeMissionLayer(pair);
         await deletePair(pair.id);
         store.clearLastSync(pair.id);
