@@ -107,8 +107,8 @@ const HealthRow = defineComponent({
     setup(props) {
         return () => h('div', { class: 'd-flex align-items-center py-1' }, [
             props.ok
-                ? h(IconCircleCheck, { size: 20, stroke: 1, class: 'text-green' })
-                : h(IconCircleX, { size: 20, stroke: 1, class: 'text-red' }),
+                ? h(IconCircleCheck, { size: 20, stroke: '1', class: 'text-green' })
+                : h(IconCircleX, { size: 20, stroke: '1', class: 'text-red' }),
             h('div', { class: 'ms-2', textContent: props.label }),
         ]);
     },

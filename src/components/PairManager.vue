@@ -186,8 +186,8 @@ import {
     IconRefresh,
     IconTrash,
 } from '@tabler/icons-vue';
-import Subscription from '@/base/subscription.ts';
-import type { Mission, MissionLayerList } from '@/types.ts';
+import Subscription from '../../../../src/base/subscription';
+import type { Mission, MissionLayerList } from '../../../../src/types';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,
@@ -228,7 +228,7 @@ onMounted(async () => {
 });
 
 function missionName(guid: string): string {
-    const m = missions.value.find((mm) => mm.guid === guid);
+    const m = missions.value.find((mm: Mission) => mm.guid === guid);
     return m ? m.name : guid;
 }
 
@@ -348,7 +348,7 @@ async function ensureMissionLayer(pair: Pair): Promise<void> {
     const name = `Caltopo: ${pair.caltopo_map_id}`;
     try {
         const list = await sub.layerList() as MissionLayerList;
-        const existing = list.data.find((l) => l.name === name);
+        const existing = list.data.find((l: { name: string; uid: string }) => l.name === name);
         if (existing) return;
         await sub.layerCreate({ name, type: 'UID' });
     } catch (err) {
@@ -362,7 +362,7 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
     const name = `Caltopo: ${pair.caltopo_map_id}`;
     try {
         const list = await sub.layerList() as MissionLayerList;
-        const existing = list.data.find((l) => l.name === name);
+        const existing = list.data.find((l: { name: string; uid: string }) => l.name === name);
         if (!existing) return;
         await sub.layerDelete(existing.uid);
     } catch (err) {
