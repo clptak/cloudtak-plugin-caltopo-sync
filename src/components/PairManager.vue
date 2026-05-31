@@ -340,8 +340,8 @@ import {
     IconAmbulance,
     IconMap,
 } from '@tabler/icons-vue';
-import Subscription from '../../../../src/base/subscription';
-import type { Mission, MissionLayerList } from '../../../../src/types';
+import Subscription from '../../../src/base/subscription.ts';
+import type { Mission, MissionLayerList } from '../../../src/types.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,

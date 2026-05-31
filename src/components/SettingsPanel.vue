@@ -152,7 +152,7 @@ import {
     IconCircleX,
     IconDeviceFloppy,
 } from '@tabler/icons-vue';
-import ProfileConfig from '../../../../src/base/profile';
+import ProfileConfig from '../../../src/base/profile.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import { health } from '../api/nodered-client.ts';
 import type { CaltopoSettings } from '../types.ts';
