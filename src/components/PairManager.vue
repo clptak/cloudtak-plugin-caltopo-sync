@@ -7,6 +7,12 @@
                 </div>
             </div>
             <div class='card-body'>
+                <TablerInlineAlert
+                    class='mb-3'
+                    severity='warning'
+                    title='Warning'
+                    description='Caltopo Map Share Setting MUST be set to "URL"'
+                />
                 <div class='row g-2'>
                     <div class='col-12 col-md-5'>
                         <TablerInput
@@ -14,6 +20,29 @@
                             label='Caltopo Map ID'
                             placeholder='e.g. ABCD1'
                         />
+                        <div class='text-center text-muted fw-bold my-2'>
+                            OR
+                        </div>
+                        <label class='form-label'>Caltopo Map (from account)</label>
+                        <select
+                            v-model='selectedCaltopoMap'
+                            class='form-select'
+                            :disabled='caltopoMapsLoading || !caltopoMaps.length'
+                            @change='onCaltopoMapSelected'
+                        >
+                            <option value=''>
+                                {{ caltopoMapsLoading
+                                    ? 'Loading maps…'
+                                    : (caltopoMaps.length ? 'Select a map…' : 'No maps available') }}
+                            </option>
+                            <option
+                                v-for='m in caltopoMaps'
+                                :key='m.id'
+                                :value='m.id'
+                            >
+                                {{ m.name }} ({{ m.id }})
+                            </option>
+                        </select>
                     </div>
                     <div class='col-12 col-md-5'>
                         <label class='form-label'>TAK Mission</label>
@@ -61,6 +90,70 @@
                     class='mt-3'
                     :err='formError'
                 />
+            </div>
+        </div>
+
+        <div class='card mt-3'>
+            <div
+                class='card-header cursor-pointer'
+                role='button'
+                @click='createMapOpen = !createMapOpen'
+            >
+                <div class='card-title'>
+                    Create Caltopo Map
+                </div>
+                <div class='ms-auto'>
+                    <IconChevronDown
+                        :size='20'
+                        stroke='1'
+                        class='create-map-chevron'
+                        :class='{ "create-map-chevron-open": createMapOpen }'
+                    />
+                </div>
+            </div>
+            <div
+                v-show='createMapOpen'
+                class='card-body'
+            >
+                <p>
+                    Create a
+                    <IconAmbulance
+                        :size='18'
+                        stroke='1'
+                        class='mx-1'
+                    />
+                    TAK DataSync first and set it as the Active DataSync. This will create a
+                    Caltopo Map with the same mission name as your Active DataSync.
+                </p>
+                <div class='mb-3'>
+                    <TablerInput
+                        v-model='createMapForm.call_location'
+                        label='Call Location:'
+                        placeholder='Coordinates for call'
+                    />
+                </div>
+                <div class='mb-3'>
+                    <TablerInput
+                        v-model='createMapForm.dr_or_activity'
+                        label='DR or Activity #:'
+                    />
+                </div>
+                <button
+                    type='button'
+                    class='btn btn-primary'
+                    :disabled='creatingMap'
+                    @click='createCaltopoMap'
+                >
+                    <IconMap
+                        :size='18'
+                        stroke='1'
+                    />
+                    <span class='ms-2'>Create Caltopo Map</span>
+                </button>
+                <p class='text-muted small mt-3 mb-0'>
+                    This creates a map with Map Share settings at URL. Please remember to change it
+                    to a higher level of security when the mission is no longer active.
+                </p>
             </div>
         </div>
 
@@ -235,6 +328,7 @@ import {
     TablerLoading,
     TablerNone,
     TablerRefreshButton,
+    TablerInlineAlert,
 } from '@tak-ps/vue-tabler';
 import {
     IconPlus,
@@ -242,6 +336,9 @@ import {
     IconTrash,
     IconPlayerPlay,
     IconPlayerStop,
+    IconChevronDown,
+    IconAmbulance,
+    IconMap,
 } from '@tabler/icons-vue';
 import Subscription from '@/base/subscription.ts';
 import type { Mission, MissionLayerList } from '@/types.ts';
@@ -252,7 +349,7 @@ import {
     deletePair,
     runSync,
 } from '../api/nodered-client.ts';
-import type { Pair, SyncResult } from '../types.ts';
+import type { Pair, SyncResult, CaltopoMapOption } from '../types.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
 
 const store = useCaltopoSyncStore();
@@ -263,6 +360,31 @@ const listError = ref<Error | undefined>();
 
 const missions = ref<Mission[]>([]);
 const missionsLoading = ref(false);
+
+// Populated from the Caltopo account (Settings → Caltopo Settings). The
+// account integration is wired separately; this list stays empty until then.
+const caltopoMaps = ref<CaltopoMapOption[]>([]);
+const caltopoMapsLoading = ref(false);
+const selectedCaltopoMap = ref<string>('');
+
+function onCaltopoMapSelected() {
+    if (selectedCaltopoMap.value) {
+        form.value.caltopo_map_id = selectedCaltopoMap.value;
+    }
+}
+
+// "Create Caltopo Map" accordion — collapsed by default. The actual creation
+// request is wired separately; this only captures the inputs for now.
+const createMapOpen = ref(false);
+const creatingMap = ref(false);
+const createMapForm = ref<{ call_location: string; dr_or_activity: string }>({
+    call_location: '',
+    dr_or_activity: '',
+});
+
+function createCaltopoMap() {
+    // Placeholder: submits a create-map request to be implemented later.
+}
 
 const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string }>({
     caltopo_map_id: '',
@@ -457,5 +579,11 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
 @keyframes caltopo-sync-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+.create-map-chevron {
+    transition: transform 0.2s ease-out;
+}
+.create-map-chevron-open {
+    transform: rotate(180deg);
 }
 </style>

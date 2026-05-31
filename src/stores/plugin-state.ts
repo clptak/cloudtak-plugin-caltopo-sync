@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { HealthCheck, SyncResult, Pair } from '../types.ts';
+import type { HealthCheck, SyncResult, Pair, CaltopoSettings } from '../types.ts';
 import { runSync } from '../api/nodered-client.ts';
 
 const STORAGE_KEY = 'caltopo-sync-nodered-url';
+const CALTOPO_SETTINGS_PREFIX = 'caltopo-sync-caltopo-settings';
 const AUTO_SYNC_MIN_SECONDS = 30;
 
 function readStoredUrl(): string {
@@ -14,11 +15,26 @@ function readStoredUrl(): string {
     }
 }
 
+function emptyCaltopoSettings(): CaltopoSettings {
+    return { credentialKey: '', credentialId: '', accountId: '' };
+}
+
+// Caltopo credentials are scoped per CloudTAK user so that one operator's
+// keys never leak to another account sharing the same browser.
+function caltopoSettingsKey(username: string): string {
+    return `${CALTOPO_SETTINGS_PREFIX}::${username}`;
+}
+
 export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
     const noderedUrl = ref<string>(readStoredUrl());
     const lastHealth = ref<HealthCheck | null>(null);
     const lastSyncByPair = ref<Record<number, SyncResult>>({});
     const enabled = ref<boolean>(false);
+
+    // Per-user Caltopo credentials. `caltopoSettingsUser` tracks which CloudTAK
+    // username the in-memory `caltopoSettings` belongs to.
+    const caltopoSettings = ref<CaltopoSettings>(emptyCaltopoSettings());
+    const caltopoSettingsUser = ref<string>('');
 
     // Per-pair auto-sync: timer + reactive snapshot for the UI.
     // Timer handles live OUTSIDE the reactive ref (Pinia would try to track
@@ -45,6 +61,36 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
 
     function setLastHealth(h: HealthCheck | null): void {
         lastHealth.value = h;
+    }
+
+    function loadCaltopoSettings(username: string): CaltopoSettings {
+        caltopoSettingsUser.value = username;
+        try {
+            const raw = localStorage.getItem(caltopoSettingsKey(username));
+            if (raw) {
+                const parsed = JSON.parse(raw) as Partial<CaltopoSettings>;
+                caltopoSettings.value = {
+                    credentialKey: parsed.credentialKey ?? '',
+                    credentialId: parsed.credentialId ?? '',
+                    accountId: parsed.accountId ?? '',
+                };
+            } else {
+                caltopoSettings.value = emptyCaltopoSettings();
+            }
+        } catch {
+            caltopoSettings.value = emptyCaltopoSettings();
+        }
+        return caltopoSettings.value;
+    }
+
+    function saveCaltopoSettings(username: string, settings: CaltopoSettings): void {
+        caltopoSettingsUser.value = username;
+        caltopoSettings.value = { ...settings };
+        try {
+            localStorage.setItem(caltopoSettingsKey(username), JSON.stringify(caltopoSettings.value));
+        } catch {
+            // localStorage may be unavailable (private mode); state is still in memory
+        }
     }
 
     function setLastSync(pairId: number, result: SyncResult): void {
@@ -103,11 +149,15 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
         lastHealth,
         lastSyncByPair,
         enabled,
+        caltopoSettings,
+        caltopoSettingsUser,
         autoSyncIntervalByPair,
         autoSyncInFlight,
         autoSyncLastTickAt,
         setNoderedUrl,
         setLastHealth,
+        loadCaltopoSettings,
+        saveCaltopoSettings,
         setLastSync,
         clearLastSync,
         setEnabled,

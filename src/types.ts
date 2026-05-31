@@ -41,3 +41,14 @@ export interface CreatePairBody {
     tak_mission_id: string;
     label?: string;
 }
+
+export interface CaltopoSettings {
+    credentialKey: string;
+    credentialId: string;
+    accountId: string;
+}
+
+export interface CaltopoMapOption {
+    id: string;
+    name: string;
+}
