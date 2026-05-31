@@ -86,8 +86,8 @@ const HealthPanel = defineComponent({
         function row(label: string, ok: boolean) {
             return h('div', { class: 'd-flex align-items-center py-1' }, [
                 ok
-                    ? h(IconCircleCheck, { size: 20, stroke: 1, class: 'text-green' })
-                    : h(IconCircleX, { size: 20, stroke: 1, class: 'text-red' }),
+                    ? h(IconCircleCheck, { size: 20, stroke: '1', class: 'text-green' })
+                    : h(IconCircleX, { size: 20, stroke: '1', class: 'text-red' }),
                 h('div', { class: 'ms-2', textContent: label }),
             ]);
         }
@@ -102,7 +102,7 @@ const HealthPanel = defineComponent({
                         disabled: loading.value,
                         onClick: refresh,
                     }, [
-                        h(IconRefresh, { size: 16, stroke: 1 }),
+                        h(IconRefresh, { size: 16, stroke: '1' }),
                         h('span', { class: 'ms-1', textContent: 'Refresh' }),
                     ]),
                 ]),
