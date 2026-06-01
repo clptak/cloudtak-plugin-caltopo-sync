@@ -57,7 +57,7 @@ cd /path/to/CloudTAK/api/web
 npm run serve   # Vite HMR; restart once after first symlink so the glob picks us up
 ```
 
-`scripts/dev-link.sh` creates `<CloudTAK>/api/web/plugins/caltopo-sync` as a symlink to this repo's `src/`. Idempotent — safe to re-run.
+`scripts/dev-link.sh` creates `<CloudTAK>/api/web/plugins/caltopo-sync` as a symlink to this repo's **root**. Idempotent — safe to re-run. (It links the root, not `src/`, so the dev layout matches how the production Docker build clones the repo into `plugins/caltopo-sync/` via `WEB_PLUGINS`. That clone places the plugin at `plugins/caltopo-sync/src/...`, which is why cross-host imports use `../../../../src/...`.)
 
 To lint in this repo (full coverage, runs standalone):
 
@@ -65,7 +65,7 @@ To lint in this repo (full coverage, runs standalone):
 npm run lint      # eslint src
 ```
 
-For full type verification, the plugin must be symlinked into the host first — its components import host internals via `../../../src/...` paths that only resolve when the source lives at `host/api/web/plugins/caltopo-sync/`. The production typecheck path is:
+For full type verification, the plugin must be symlinked into the host first — its components import host internals via `../../../../src/...` paths that only resolve when the repo root lives at `host/api/web/plugins/caltopo-sync/` (so the components sit at `plugins/caltopo-sync/src/components/...`). The production typecheck path is:
 
 ```bash
 bash scripts/dev-link.sh /path/to/CloudTAK

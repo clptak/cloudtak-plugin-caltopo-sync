@@ -4,8 +4,12 @@ set -euo pipefail
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <path-to-CloudTAK-checkout>" >&2
     echo "" >&2
-    echo "Symlinks <repo>/src into <CloudTAK>/api/web/plugins/caltopo-sync so the" >&2
-    echo "host Vite build picks it up via import.meta.glob." >&2
+    echo "Symlinks this repo's ROOT into <CloudTAK>/api/web/plugins/caltopo-sync so the" >&2
+    echo "host Vite build picks it up via import.meta.glob (../plugins/*/index.ts)." >&2
+    echo "" >&2
+    echo "The root is linked (not src/) so the dev layout matches how the production" >&2
+    echo "Docker build clones the repo (WEB_PLUGINS): plugins/caltopo-sync/src/...." >&2
+    echo "That extra src/ level is why cross-host imports use '../../../../src/...'." >&2
     exit 1
 fi
 
@@ -13,12 +17,12 @@ CLOUDTAK="$1"
 PLUGIN_NAME="caltopo-sync"
 
 REPO_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
-SRC="${REPO_ROOT}/src"
+SRC="${REPO_ROOT}"
 DEST_PARENT="${CLOUDTAK}/api/web/plugins"
 DEST="${DEST_PARENT}/${PLUGIN_NAME}"
 
-if [ ! -d "${SRC}" ]; then
-    echo "Error: source directory not found: ${SRC}" >&2
+if [ ! -f "${SRC}/index.ts" ]; then
+    echo "Error: repo root entry not found: ${SRC}/index.ts" >&2
     exit 1
 fi
 

@@ -126,7 +126,7 @@ Do:
 | `/Users/paulclifton/dev/node-red-caltopo-tak-sync/` | Extracted engine repo |
 | `/Users/paulclifton/node-red-sarops-docker/data/projects/test_nr_project/flows.json` | Live Node-RED flow (the canonical runtime state) |
 | `/Users/paulclifton/CloudTAK/api/web/plugins/` | Where CloudTAK loads frontend plugins (Vite glob) |
-| `/Users/paulclifton/CloudTAK/api/web/plugins/caltopo-sync/` | Dev symlink → plugin repo's `src/` (created by `scripts/dev-link.sh`) |
+| `/Users/paulclifton/CloudTAK/api/web/plugins/caltopo-sync/` | Dev symlink → plugin repo **root** (created by `scripts/dev-link.sh`); matches the prod Docker clone layout, so components live at `.../caltopo-sync/src/components/` and cross-host imports use `../../../../src/...` |
 
 ## Env vars currently in the live Node-RED container
 
