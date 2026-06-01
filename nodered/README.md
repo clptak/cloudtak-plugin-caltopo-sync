@@ -12,8 +12,45 @@ the two legacy nodes whose wire-lists are touched. The legacy
 - `flow-export.json` — single Node-RED flow-export. Drops a new tab labeled
   "Caltopo Sync Plugin Bridge" with 5 endpoints, CORS preflight handlers,
   and a real per-feature completion-signal aggregator for `POST /sync/run`.
+- `caltopo-proxy-flow.json` — standalone importable tab ("Caltopo Proxy")
+  exposing `POST /caltopo`, a generic server-side CalTopo proxy. See below.
 - `migration.sql` — creates the `sync_pairs` table.
 - `endpoints.md` — full HTTP contract reference.
+
+## Caltopo Proxy (`POST /caltopo`)
+
+The browser cannot call `caltopo.com` directly — CalTopo returns no CORS
+headers, so the cross-origin fetch is blocked (confirmed: `OPTIONS` → 403,
+`GET` → 401, neither with `Access-Control-Allow-Origin`). The plugin's
+"Create Caltopo Map" (and any other CalTopo call) therefore POST to this
+proxy, which signs (HMAC-SHA256) and forwards the request server-to-server,
+then returns the response with permissive CORS headers.
+
+Import `caltopo-proxy-flow.json` as its own tab (no overlap with the bridge),
+then Deploy. It is **generic** — one endpoint serves every request type:
+
+```http
+POST /caltopo
+Content-Type: application/json
+
+{
+  "method": "POST",                 // or "GET"; default POST
+  "endpoint": "/api/v1/acct/",      // or "/api/v1/map/..." for map endpoints
+  "accountId": "<team/account id>", // required for /acct/ endpoints
+  "mapID": "<map id>",              // for map endpoints
+  "uuid": "<feature id>",           // optional (feature update)
+  "since": 0,                        // optional, GET since/<n>
+  "payload": { /* CalTopo body */ }, // for POST
+  "credentialId": "...",             // optional; env fallback
+  "credentialKey": "..."             // optional; env fallback
+}
+```
+
+Credentials resolve from the request body first, then env vars
+(`credentialId`/`credentialKey`/`accountId`, or `CALTOPO_CREDENTIAL_ID` /
+`CALTOPO_CREDENTIAL_KEY` / `CALTOPO_ACCOUNT_ID`). The CloudTAK plugin forwards
+the credentials saved in its Settings panel, so no extra env vars are required
+for the proxy.
 
 ## What this import modifies
 

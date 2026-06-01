@@ -1,0 +1,162 @@
+[
+    {
+        "id": "ca17000000000001",
+        "type": "tab",
+        "label": "Caltopo Proxy",
+        "disabled": false,
+        "info": "Generic server-side CalTopo proxy for the CloudTAK plugin.\n\nWhy: the browser cannot call caltopo.com directly (CalTopo sends no CORS\nheaders, so the cross-origin fetch is blocked). This tab exposes ONE\nendpoint the plugin can call; Node-RED signs (HMAC-SHA256) and forwards the\nrequest to CalTopo server-to-server, then returns the response with CORS\nheaders.\n\nEndpoint:\n  POST /caltopo   body: {\n                    method:        'POST' | 'GET',          // default POST\n                    endpoint:      '/api/v1/acct/' | '/api/v1/map/...' ,\n                    accountId:     '<team/account id>',       // for /acct/ endpoints\n                    mapID:         '<map id>',                // for map endpoints\n                    uuid:          '<feature id>',            // optional (PUT/update)\n                    since:         <number>,                  // optional, GET since/<n>\n                    payload:       { ...GeoJSON/CalTopo body },// for POST\n                    credentialId:  '...', credentialKey: '...' // optional; env fallback\n                  }\n  OPTIONS /caltopo  -> 204 preflight\n\nCredentials resolve from the request body first, then env vars\n(credentialId/credentialKey/accountId, or CALTOPO_CREDENTIAL_ID/\nCALTOPO_CREDENTIAL_KEY/CALTOPO_ACCOUNT_ID).\n\nThis is intentionally generic so the same endpoint serves every CalTopo\nrequest type (create map, since-polling, feature create/update, etc.)."
+    },
+    {
+        "id": "ca17000000000002",
+        "type": "http in",
+        "z": "ca17000000000001",
+        "name": "POST /caltopo",
+        "url": "/caltopo",
+        "method": "post",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 120,
+        "wires": [
+            [
+                "ca17000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000003",
+        "type": "function",
+        "z": "ca17000000000001",
+        "name": "Caltopo Request (sign)",
+        "func": "/* jshint esversion: 8, node: true */\nconst req = msg.payload || {};\nconst method = String(req.method || 'POST').toUpperCase();\nconst endpoint = req.endpoint || '/api/v1/acct/';\nconst mapID = req.mapID || req.map_id || '';\nconst dataPayload = req.payload;\nconst mapClassType = (dataPayload && dataPayload.properties && dataPayload.properties.class) || '';\n\nlet uuid = '';\nif (req.uuid) { uuid = '/' + req.uuid; }\nelse if (dataPayload && dataPayload.id) { uuid = '/' + dataPayload.id; }\n\nconst accountId = req.accountId || env.get('accountId') || env.get('CALTOPO_ACCOUNT_ID') || '';\nconst credentialId = req.credentialId || env.get('credentialId') || env.get('CALTOPO_CREDENTIAL_ID') || '';\nconst credentialKey = req.credentialKey || env.get('credentialKey') || env.get('CALTOPO_CREDENTIAL_KEY') || '';\nconst baseUrl = req.baseCaltopoUrl || env.get('baseCaltopoUrl') || 'https://caltopo.com';\n\nconst missing = [];\nif (!accountId && endpoint === '/api/v1/acct/') missing.push('accountId');\nif (!credentialId) missing.push('credentialId');\nif (!credentialKey) missing.push('credentialKey');\nif (missing.length) {\n    msg.statusCode = 400;\n    msg.caltopoError = { error: 'missing required fields: ' + missing.join(', ') };\n    return [null, msg];\n}\n\nconst ts = (req.since !== undefined && req.since !== null && req.since !== '') ? String(req.since) : '0';\nconst payloadString = (dataPayload !== undefined && dataPayload !== null) ? JSON.stringify(dataPayload) : '';\nconst expires = Date.now() + (2 * 60 * 1000);\n\nlet path;\nif (endpoint === '/api/v1/acct/') {\n    path = (method === 'POST') ? (endpoint + accountId + '/CollaborativeMap') : (endpoint + accountId + '/since/' + ts);\n} else {\n    path = (method === 'POST') ? (endpoint + mapID + '/' + mapClassType + uuid) : (endpoint + mapID + '/since/' + ts);\n}\n\nconst signBody = (method === 'POST') ? payloadString : '';\nconst message = method + ' ' + path + '\\n' + expires + '\\n' + signBody;\n\nconst secret = Buffer.from(credentialKey, 'base64');\nconst signature = crypto.createHmac('sha256', secret).update(message).digest('base64');\n\nconst params = { id: credentialId, expires: expires.toString(), signature: signature };\n\nmsg.method = method;\nmsg.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };\nif (method === 'POST') {\n    params.json = payloadString;\n    msg.url = baseUrl + path;\n    msg.payload = querystring.stringify(params);\n} else {\n    msg.url = baseUrl + path + '?' + querystring.stringify(params);\n    msg.payload = '';\n}\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "crypto",
+                "module": "crypto"
+            },
+            {
+                "var": "querystring",
+                "module": "querystring"
+            }
+        ],
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "ca17000000000004"
+            ],
+            [
+                "ca17000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000004",
+        "type": "http request",
+        "z": "ca17000000000001",
+        "name": "CalTopo API",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 650,
+        "y": 100,
+        "wires": [
+            [
+                "ca17000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000005",
+        "type": "function",
+        "z": "ca17000000000001",
+        "name": "Caltopo Response (CORS)",
+        "func": "let bodyObj;\nlet status;\nif (msg.caltopoError) {\n    bodyObj = msg.caltopoError;\n    status = msg.statusCode || 400;\n} else {\n    const up = msg.payload;\n    if (up && typeof up === 'object') {\n        bodyObj = up;\n    } else {\n        try { bodyObj = JSON.parse(up); }\n        catch (e) { bodyObj = { raw: (up === undefined || up === null) ? '' : String(up) }; }\n    }\n    status = msg.statusCode || 200;\n}\nmsg.payload = bodyObj;\nmsg.statusCode = status;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 900,
+        "y": 120,
+        "wires": [
+            [
+                "ca17000000000006"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000006",
+        "type": "http response",
+        "z": "ca17000000000001",
+        "name": "reply",
+        "statusCode": "",
+        "headers": {},
+        "x": 1130,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "ca17000000000007",
+        "type": "http in",
+        "z": "ca17000000000001",
+        "name": "OPTIONS /caltopo",
+        "url": "/caltopo",
+        "method": "options",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 200,
+        "wires": [
+            [
+                "ca17000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000008",
+        "type": "function",
+        "z": "ca17000000000001",
+        "name": "CORS preflight",
+        "func": "msg.statusCode = 204;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Access-Control-Max-Age': '600'\n};\nmsg.payload = '';\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 200,
+        "wires": [
+            [
+                "ca17000000000009"
+            ]
+        ]
+    },
+    {
+        "id": "ca17000000000009",
+        "type": "http response",
+        "z": "ca17000000000001",
+        "name": "CORS reply",
+        "statusCode": "",
+        "headers": {},
+        "x": 650,
+        "y": 200,
+        "wires": []
+    }
+]

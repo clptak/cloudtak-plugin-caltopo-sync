@@ -77,3 +77,11 @@ export function runSync(pair: Pair): Promise<SyncResult> {
         tak_mission_id: pair.tak_mission_id,
     });
 }
+
+// Generic CalTopo proxy. The browser cannot call caltopo.com directly (no CORS
+// headers), so Node-RED signs and forwards the request server-to-server. See
+// nodered/caltopo-proxy-flow.json. `body` carries { method, endpoint, accountId,
+// mapID?, uuid?, since?, payload?, credentialId?, credentialKey? }.
+export function caltopoProxy<T = unknown>(body: Record<string, unknown>): Promise<T> {
+    return request<T>('POST', '/caltopo', body);
+}
