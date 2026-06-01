@@ -127,8 +127,29 @@ function extractMapId(parsed: unknown): string | undefined {
     return typeof id === 'string' && id ? id : undefined;
 }
 
+// Decode base64 the way the Node-RED reference does via `Buffer.from(key, 'base64')`,
+// which is lenient where the browser's `atob` is strict. CalTopo credential keys
+// seen in the wild carry trailing junk after a mid-string '=' (e.g.
+// "…WjI=/ll89EcDYaM="); Node decodes only up to that first '=' and ignores the
+// rest. We reproduce that exactly so the HMAC secret matches the working flow:
+//   1. normalize URL-safe alphabet (- _ -> + /)
+//   2. truncate at the first '=' padding (Node treats it as end-of-data)
+//   3. drop any remaining non-alphabet chars (whitespace, stray symbols)
+//   4. re-pad to a multiple of 4 so atob() accepts it
 function base64ToBytes(b64: string): Uint8Array {
-    const binary = atob(b64);
+    let s = b64.trim().replace(/-/g, '+').replace(/_/g, '/');
+
+    const eq = s.indexOf('=');
+    if (eq !== -1) s = s.slice(0, eq);
+
+    s = s.replace(/[^A-Za-z0-9+/]/g, '');
+
+    const remainder = s.length % 4;
+    if (remainder === 2) s += '==';
+    else if (remainder === 3) s += '=';
+    else if (remainder === 1) s = s.slice(0, -1);
+
+    const binary = atob(s);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);
