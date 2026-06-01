@@ -110,17 +110,49 @@ apply. This is the same path your `/sync` engine already uses successfully.
 
 ### One-time setup
 
-1. **Import the proxy flow.** In Node-RED: *Menu → Import* → import
+1. **Enable CORS in Node-RED (`httpNodeCors`) — required.** The plugin calls the
+   proxy from the browser with `Content-Type: application/json`, which triggers a
+   CORS **preflight** (`OPTIONS`). Per-route `OPTIONS` `http in` nodes do **not**
+   reliably answer that preflight — Node-RED/Express auto-handles `OPTIONS` and
+   returns *no* `Access-Control-Allow-Origin`, so the browser blocks the real
+   `POST` with `Origin … is not allowed by Access-Control-Allow-Origin` even
+   though the endpoint returns `200`. The fix is Node-RED's global CORS setting.
+   In your `settings.js` (the dockerized stack mounts this at `/data/settings.js`)
+   add/uncomment:
+
+   ```js
+   httpNodeCors: {
+       origin: "*",
+       methods: "GET,POST,PUT,DELETE,OPTIONS",
+       allowedHeaders: "Content-Type",
+   },
+   ```
+
+   Then **restart Node-RED**. Verify the preflight now returns `204` with
+   `access-control-allow-origin: *`:
+
+   ```bash
+   curl -s -i -X OPTIONS 'https://<your-nodered-host>/sync/caltopo' \
+     -H 'Origin: https://<your-cloudtak-host>' \
+     -H 'Access-Control-Request-Method: POST' \
+     -H 'Access-Control-Request-Headers: content-type' | sed -n '1,12p'
+   ```
+
+   This also fixes the browser `POST`s to `/sync/pairs` and `/sync/run`, which
+   share the same preflight requirement. (The `Access-Control-Allow-Origin: '*'`
+   headers the flow functions set are harmless alongside this — Node-RED
+   overwrites rather than duplicates the header.)
+2. **Import the proxy flow.** In Node-RED: *Menu → Import* → import
    [`nodered/caltopo-proxy-flow.json`](./nodered/caltopo-proxy-flow.json) →
    **Deploy**. It lands on its own "Caltopo Proxy" tab and exposes
-   `POST /sync/caltopo` (plus an `OPTIONS` preflight handler). The `/sync/`
-   prefix means it reuses the same reverse-proxy route as your existing bridge
-   endpoints, so no Caddy/nginx change is needed. It does not touch the sync
-   bridge, so no re-import of `flow-export.json` or the sync scripts is needed.
+   `POST /sync/caltopo`. The `/sync/` prefix means it reuses the same
+   reverse-proxy route as your existing bridge endpoints, so no Caddy/nginx
+   change is needed. It does not touch the sync bridge, so no re-import of
+   `flow-export.json` or the sync scripts is needed.
    Full request contract: [`nodered/README.md`](./nodered#caltopo-proxy-post-synccaltopo).
-2. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
+3. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
    Health/Sync features use).
-3. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,
+4. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,
    Credential Key, and **Team (Folder) ID**. These are stored per CloudTAK user in
    `localStorage` and forwarded to the proxy on each create-map request.
 
@@ -134,7 +166,7 @@ apply. This is the same path your `/sync` engine already uses successfully.
    > `https://caltopo.com/group/{team_id}/admin/details`. If you have several teams
    > or sub-teams, use the one you actually want new maps to land in (the same value
    > your Node-RED flow passes as `caltopoTeamId` / `mapMissionTeamFolder`).
-4. **Remove any `api.caltopo.com` / `caltopo.com` entry** you may have added to
+5. **Remove any `api.caltopo.com` / `caltopo.com` entry** you may have added to
    the CloudTAK CSP `connect-src` allowlist — it is unnecessary. The browser only
    talks to Node-RED, whose host is already allowed.
 

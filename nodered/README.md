@@ -30,6 +30,35 @@ The endpoint lives under the **`/sync/` prefix** so it reuses the same
 reverse-proxy route your existing bridge endpoints (`/sync/run`,
 `/sync/health`, …) already travel — no Caddy/nginx change needed.
 
+> **Required: enable `httpNodeCors` in Node-RED `settings.js`.** The plugin
+> posts JSON from the browser, which triggers a CORS preflight (`OPTIONS`).
+> Per-route `OPTIONS` `http in` nodes do **not** reliably answer it — Node-RED/
+> Express auto-handles `OPTIONS` and returns no `Access-Control-Allow-Origin`,
+> so the browser blocks the real `POST` (`Origin … is not allowed …`, even with
+> a `200`). Add this to `settings.js` (dockerized stacks mount it at
+> `/data/settings.js`) and **restart Node-RED**:
+>
+> ```js
+> httpNodeCors: {
+>     origin: "*",
+>     methods: "GET,POST,PUT,DELETE,OPTIONS",
+>     allowedHeaders: "Content-Type",
+> },
+> ```
+>
+> This handles preflights globally (before routing), so it also fixes the
+> browser `POST`s to `/sync/pairs` and `/sync/run`. The per-function
+> `Access-Control-Allow-Origin: '*'` headers remain harmless — Node-RED
+> overwrites rather than duplicates the header. Verify:
+>
+> ```bash
+> curl -s -i -X OPTIONS 'https://<nodered-host>/sync/caltopo' \
+>   -H 'Origin: https://<cloudtak-host>' \
+>   -H 'Access-Control-Request-Method: POST' \
+>   -H 'Access-Control-Request-Headers: content-type' | sed -n '1,12p'
+> # expect: 204 with access-control-allow-origin: *
+> ```
+
 Import `caltopo-proxy-flow.json` as its own tab (no overlap with the bridge),
 then Deploy. It is **generic** — one endpoint serves every request type:
 
