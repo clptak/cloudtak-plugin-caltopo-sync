@@ -4,14 +4,14 @@
         "type": "tab",
         "label": "Caltopo Proxy",
         "disabled": false,
-        "info": "Generic server-side CalTopo proxy for the CloudTAK plugin.\n\nWhy: the browser cannot call caltopo.com directly (CalTopo sends no CORS\nheaders, so the cross-origin fetch is blocked). This tab exposes ONE\nendpoint the plugin can call; Node-RED signs (HMAC-SHA256) and forwards the\nrequest to CalTopo server-to-server, then returns the response with CORS\nheaders.\n\nEndpoint:\n  POST /caltopo   body: {\n                    method:        'POST' | 'GET',          // default POST\n                    endpoint:      '/api/v1/acct/' | '/api/v1/map/...' ,\n                    accountId:     '<team/account id>',       // for /acct/ endpoints\n                    mapID:         '<map id>',                // for map endpoints\n                    uuid:          '<feature id>',            // optional (PUT/update)\n                    since:         <number>,                  // optional, GET since/<n>\n                    payload:       { ...GeoJSON/CalTopo body },// for POST\n                    credentialId:  '...', credentialKey: '...' // optional; env fallback\n                  }\n  OPTIONS /caltopo  -> 204 preflight\n\nCredentials resolve from the request body first, then env vars\n(credentialId/credentialKey/accountId, or CALTOPO_CREDENTIAL_ID/\nCALTOPO_CREDENTIAL_KEY/CALTOPO_ACCOUNT_ID).\n\nThis is intentionally generic so the same endpoint serves every CalTopo\nrequest type (create map, since-polling, feature create/update, etc.)."
+        "info": "Generic server-side CalTopo proxy for the CloudTAK plugin.\n\nWhy: the browser cannot call caltopo.com directly (CalTopo sends no CORS\nheaders, so the cross-origin fetch is blocked). This tab exposes ONE\nendpoint the plugin can call; Node-RED signs (HMAC-SHA256) and forwards the\nrequest to CalTopo server-to-server, then returns the response with CORS\nheaders.\n\nThe endpoint lives under the /sync/ prefix so it rides the same reverse-proxy\nroute the existing bridge (/sync/run, /sync/health, ...) already uses.\n\nEndpoint:\n  POST /sync/caltopo   body: {\n                    method:        'POST' | 'GET',          // default POST\n                    endpoint:      '/api/v1/acct/' | '/api/v1/map/...' ,\n                    accountId:     '<team/account id>',       // for /acct/ endpoints\n                    mapID:         '<map id>',                // for map endpoints\n                    uuid:          '<feature id>',            // optional (PUT/update)\n                    since:         <number>,                  // optional, GET since/<n>\n                    payload:       { ...GeoJSON/CalTopo body },// for POST\n                    credentialId:  '...', credentialKey: '...' // optional; env fallback\n                  }\n  OPTIONS /sync/caltopo  -> 204 preflight\n\nCredentials resolve from the request body first, then env vars\n(credentialId/credentialKey/accountId, or CALTOPO_CREDENTIAL_ID/\nCALTOPO_CREDENTIAL_KEY/CALTOPO_ACCOUNT_ID).\n\nThis is intentionally generic so the same endpoint serves every CalTopo\nrequest type (create map, since-polling, feature create/update, etc.)."
     },
     {
         "id": "ca17000000000002",
         "type": "http in",
         "z": "ca17000000000001",
-        "name": "POST /caltopo",
-        "url": "/caltopo",
+        "name": "POST /sync/caltopo",
+        "url": "/sync/caltopo",
         "method": "post",
         "upload": false,
         "skipBodyParsing": false,
@@ -115,8 +115,8 @@
         "id": "ca17000000000007",
         "type": "http in",
         "z": "ca17000000000001",
-        "name": "OPTIONS /caltopo",
-        "url": "/caltopo",
+        "name": "OPTIONS /sync/caltopo",
+        "url": "/sync/caltopo",
         "method": "options",
         "upload": false,
         "swaggerDoc": "",

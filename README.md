@@ -113,9 +113,11 @@ apply. This is the same path your `/sync` engine already uses successfully.
 1. **Import the proxy flow.** In Node-RED: *Menu → Import* → import
    [`nodered/caltopo-proxy-flow.json`](./nodered/caltopo-proxy-flow.json) →
    **Deploy**. It lands on its own "Caltopo Proxy" tab and exposes
-   `POST /caltopo` (plus an `OPTIONS` preflight handler). It does not touch the
-   sync bridge, so no re-import of `flow-export.json` or the sync scripts is
-   needed. Full request contract: [`nodered/README.md`](./nodered#caltopo-proxy-post-caltopo).
+   `POST /sync/caltopo` (plus an `OPTIONS` preflight handler). The `/sync/`
+   prefix means it reuses the same reverse-proxy route as your existing bridge
+   endpoints, so no Caddy/nginx change is needed. It does not touch the sync
+   bridge, so no re-import of `flow-export.json` or the sync scripts is needed.
+   Full request contract: [`nodered/README.md`](./nodered#caltopo-proxy-post-synccaltopo).
 2. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
    Health/Sync features use).
 3. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,

@@ -13,11 +13,11 @@ the two legacy nodes whose wire-lists are touched. The legacy
   "Caltopo Sync Plugin Bridge" with 5 endpoints, CORS preflight handlers,
   and a real per-feature completion-signal aggregator for `POST /sync/run`.
 - `caltopo-proxy-flow.json` — standalone importable tab ("Caltopo Proxy")
-  exposing `POST /caltopo`, a generic server-side CalTopo proxy. See below.
+  exposing `POST /sync/caltopo`, a generic server-side CalTopo proxy. See below.
 - `migration.sql` — creates the `sync_pairs` table.
 - `endpoints.md` — full HTTP contract reference.
 
-## Caltopo Proxy (`POST /caltopo`)
+## Caltopo Proxy (`POST /sync/caltopo`)
 
 The browser cannot call `caltopo.com` directly — CalTopo returns no CORS
 headers, so the cross-origin fetch is blocked (confirmed: `OPTIONS` → 403,
@@ -26,11 +26,15 @@ headers, so the cross-origin fetch is blocked (confirmed: `OPTIONS` → 403,
 proxy, which signs (HMAC-SHA256) and forwards the request server-to-server,
 then returns the response with permissive CORS headers.
 
+The endpoint lives under the **`/sync/` prefix** so it reuses the same
+reverse-proxy route your existing bridge endpoints (`/sync/run`,
+`/sync/health`, …) already travel — no Caddy/nginx change needed.
+
 Import `caltopo-proxy-flow.json` as its own tab (no overlap with the bridge),
 then Deploy. It is **generic** — one endpoint serves every request type:
 
 ```http
-POST /caltopo
+POST /sync/caltopo
 Content-Type: application/json
 
 {
