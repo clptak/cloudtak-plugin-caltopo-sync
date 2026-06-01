@@ -42,7 +42,7 @@ CloudTAK plugins are **compile-time vendored** — there is no runtime upload UI
 
 1. Clone this repo somewhere reachable by the operator's build host.
 2. Symlink (or copy) `src/` into `CloudTAK/api/web/plugins/caltopo-sync` **before** running `npm run build` in the host.
-3. Operate the Node-RED side per [`nodered/README.md`](./nodered) — the plugin's "Settings" panel only configures the Node-RED base URL.
+3. Operate the Node-RED side per [`nodered/README.md`](./nodered). The plugin's "Settings" panel configures the Node-RED base URL **and** the CalTopo account credentials used for map creation (see [Creating Caltopo Maps](#creating-caltopo-maps)).
 
 ## Develop
 
@@ -87,6 +87,56 @@ The Caltopo credentials and TAK destination live entirely in the Node-RED instan
 - TAK server URL / cert paths used by the existing flow
 
 The plugin's "Health" tab calls `GET /sync/health` on the configured Node-RED base URL — green checks here mean the engine is wired up; red means fix Node-RED first.
+
+## Creating Caltopo Maps
+
+The "Add Pair" tab has a **Create Caltopo Map** card that creates a new SAR-mode
+CalTopo map (shared by URL) with a marker at a parsed call location, titled after
+the Active DataSync (or the DR/Activity number when no DataSync is active).
+
+### Why this needs a Node-RED proxy
+
+The browser **cannot** call `caltopo.com` directly. CalTopo's API returns no CORS
+headers, so a cross-origin `fetch` from the CloudTAK origin is blocked by the
+browser before any response is read (verified: `OPTIONS` → `403`, `GET` → `401`,
+neither with `Access-Control-Allow-Origin`). In Safari this surfaces as an instant
+**"Load failed"**. Note `api.caltopo.com` does not exist — the real API host is
+`caltopo.com`.
+
+The fix is a small **server-side proxy in Node-RED**: the plugin POSTs to Node-RED
+(same-origin-friendly, already CORS-enabled), and Node-RED signs the request
+(HMAC-SHA256) and forwards it to CalTopo server-to-server, where CORS does not
+apply. This is the same path your `/sync` engine already uses successfully.
+
+### One-time setup
+
+1. **Import the proxy flow.** In Node-RED: *Menu → Import* → import
+   [`nodered/caltopo-proxy-flow.json`](./nodered/caltopo-proxy-flow.json) →
+   **Deploy**. It lands on its own "Caltopo Proxy" tab and exposes
+   `POST /caltopo` (plus an `OPTIONS` preflight handler). It does not touch the
+   sync bridge, so no re-import of `flow-export.json` or the sync scripts is
+   needed. Full request contract: [`nodered/README.md`](./nodered#caltopo-proxy-post-caltopo).
+2. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
+   Health/Sync features use).
+3. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,
+   Credential Key, and Account ID. These are stored per CloudTAK user in
+   `localStorage` and forwarded to the proxy on each create-map request.
+4. **Remove any `api.caltopo.com` / `caltopo.com` entry** you may have added to
+   the CloudTAK CSP `connect-src` allowlist — it is unnecessary. The browser only
+   talks to Node-RED, whose host is already allowed.
+
+### Credentials: plugin vs. env vars
+
+By default the plugin forwards the credentials from its Settings panel to the
+proxy (over HTTPS). If you prefer the secrets never leave Node-RED, set them as
+env vars on the Node-RED host instead and the proxy will fall back to them:
+
+- `CALTOPO_CREDENTIAL_ID`
+- `CALTOPO_CREDENTIAL_KEY`
+- `CALTOPO_ACCOUNT_ID`
+
+(The proxy reads body-provided credentials first, then these env vars.) If you go
+env-only, ask to have the plugin stop forwarding credentials in the request body.
 
 ## Screenshots
 
