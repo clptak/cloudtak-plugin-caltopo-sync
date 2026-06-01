@@ -154,7 +154,8 @@
                     v-if='!activeMissionName'
                     class='text-muted small mt-2'
                 >
-                    Set a DataSync as the Active DataSync to enable map creation.
+                    No Active DataSync — the map will be titled with the DR/Activity number.
+                    Set a DataSync as active to title it after the mission instead.
                 </div>
                 <TablerAlert
                     v-if='createMapError'
@@ -413,8 +414,7 @@ const createdMapId = ref<string>('');
 const activeMissionName = computed<string>(() => mapStore.mission?.meta.name ?? '');
 
 const canCreateMap = computed<boolean>(() => {
-    return !!activeMissionName.value
-        && createMapForm.value.call_location.trim() !== ''
+    return createMapForm.value.call_location.trim() !== ''
         && createMapForm.value.dr_or_activity.trim() !== '';
 });
 
@@ -438,11 +438,9 @@ async function createCaltopoMapHandler() {
     createMapError.value = undefined;
     createdMapId.value = '';
 
-    const missionName = activeMissionName.value;
-    if (!missionName) {
-        createMapError.value = new Error('No Active DataSync. Set a DataSync as active first.');
-        return;
-    }
+    // Prefer the Active DataSync name for the map title; fall back to the
+    // DR/Activity number so creation still works when none is active.
+    const missionName = activeMissionName.value || createMapForm.value.dr_or_activity.trim();
 
     // PairManager doesn't load credentials on mount — pull the per-user
     // settings now so a fresh visit to this tab still has them.
