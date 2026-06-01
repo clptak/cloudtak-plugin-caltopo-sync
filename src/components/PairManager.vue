@@ -23,7 +23,22 @@
                         <div class='text-center text-muted fw-bold my-2'>
                             OR
                         </div>
-                        <label class='form-label'>Caltopo Map (from account)</label>
+                        <div class='d-flex align-items-center justify-content-between'>
+                            <label class='form-label mb-0'>Caltopo Map (from account)</label>
+                            <button
+                                type='button'
+                                class='btn btn-sm btn-link p-0'
+                                :disabled='caltopoMapsLoading'
+                                title='Reload maps from the Caltopo account'
+                                @click='loadCaltopoMaps'
+                            >
+                                <IconRefresh
+                                    :size='16'
+                                    stroke='1'
+                                    :class='caltopoMapsLoading ? "spin-animation" : ""'
+                                />
+                            </button>
+                        </div>
                         <select
                             v-model='selectedCaltopoMap'
                             class='form-select'
@@ -43,6 +58,11 @@
                                 {{ m.name }} ({{ m.id }})
                             </option>
                         </select>
+                        <TablerAlert
+                            v-if='caltopoMapsError'
+                            class='mt-2'
+                            :err='caltopoMapsError'
+                        />
                     </div>
                     <div class='col-12 col-md-5'>
                         <label class='form-label'>TAK Mission</label>
@@ -371,7 +391,7 @@ import {
     deletePair,
     runSync,
 } from '../api/nodered-client.ts';
-import { buildCreateMapBody, createCaltopoMap } from '../api/caltopo-client.ts';
+import { buildCreateMapBody, createCaltopoMap, listCaltopoMaps } from '../api/caltopo-client.ts';
 import { parseCoordinates } from '../lib/coordinates.ts';
 import type { Pair, SyncResult, CaltopoMapOption } from '../types.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
@@ -386,15 +406,43 @@ const listError = ref<Error | undefined>();
 const missions = ref<Mission[]>([]);
 const missionsLoading = ref(false);
 
-// Populated from the Caltopo account (Settings → Caltopo Settings). The
-// account integration is wired separately; this list stays empty until then.
+// Populated from the Caltopo account (Settings → Caltopo Settings) via the
+// account-data endpoint (GET /api/v1/acct/{teamId}/since/0) through the proxy.
 const caltopoMaps = ref<CaltopoMapOption[]>([]);
 const caltopoMapsLoading = ref(false);
+const caltopoMapsError = ref<Error | undefined>();
 const selectedCaltopoMap = ref<string>('');
 
 function onCaltopoMapSelected() {
     if (selectedCaltopoMap.value) {
         form.value.caltopo_map_id = selectedCaltopoMap.value;
+    }
+}
+
+// Loads the CollaborativeMaps in the configured team/account so the user can
+// pick one instead of pasting a map id. Silently no-ops when credentials are
+// not yet filled in (a fresh visit before Settings are saved).
+async function loadCaltopoMaps() {
+    caltopoMapsError.value = undefined;
+    const username = await resolveUsername();
+    const creds = store.loadCaltopoSettings(username);
+    if (!creds.credentialId.trim() || !creds.credentialKey.trim() || !creds.accountId.trim()) {
+        caltopoMaps.value = [];
+        return;
+    }
+
+    caltopoMapsLoading.value = true;
+    try {
+        caltopoMaps.value = await listCaltopoMaps({
+            accountId: creds.accountId.trim(),
+            credentialId: creds.credentialId.trim(),
+            credentialKey: creds.credentialKey.trim(),
+        });
+    } catch (err) {
+        caltopoMapsError.value = err instanceof Error ? err : new Error(String(err));
+        caltopoMaps.value = [];
+    } finally {
+        caltopoMapsLoading.value = false;
     }
 }
 
@@ -479,6 +527,8 @@ async function createCaltopoMapHandler() {
         createdMapId.value = result.id;
         // Pre-fill the Add Pair form with the freshly created map id.
         form.value.caltopo_map_id = result.id;
+        // Surface the new map in the account picker too.
+        void loadCaltopoMaps();
     } catch (err) {
         createMapError.value = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -523,7 +573,7 @@ const canSubmit = computed(() => {
 });
 
 onMounted(async () => {
-    await Promise.all([fetchPairs(), fetchMissions()]);
+    await Promise.all([fetchPairs(), fetchMissions(), loadCaltopoMaps()]);
 });
 
 function missionName(guid: string): string {
