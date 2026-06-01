@@ -24,9 +24,14 @@
                 <div class='mb-3'>
                     <TablerInput
                         v-model='caltopo.accountId'
-                        label='Account ID'
-                        placeholder='Caltopo account ID'
+                        label='Team (Folder) ID'
+                        placeholder='e.g. SUVCDH'
                     />
+                    <small class='text-muted'>
+                        The 6-character ID of the team/folder where maps should be created and
+                        where your credential has write rights — not your parent account ID. Find
+                        it in the team admin URL: caltopo.com/group/&lt;TEAM_ID&gt;/admin/details
+                    </small>
                 </div>
                 <div class='d-flex align-items-center'>
                     <button

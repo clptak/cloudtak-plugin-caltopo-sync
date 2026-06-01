@@ -121,8 +121,19 @@ apply. This is the same path your `/sync` engine already uses successfully.
 2. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
    Health/Sync features use).
 3. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,
-   Credential Key, and Account ID. These are stored per CloudTAK user in
+   Credential Key, and **Team (Folder) ID**. These are stored per CloudTAK user in
    `localStorage` and forwarded to the proxy on each create-map request.
+
+   > **Which value is the "Team (Folder) ID"?** This is the single most common
+   > setup mistake. Maps are created at `/api/v1/acct/{team_id}/CollaborativeMap`,
+   > so this field must be the 6-character ID of the **team/sub-team (folder) where
+   > your service-account credential has write rights** — *not* your top-level
+   > parent account ID. A parent account ID will often let you *read* (e.g. listing
+   > maps) but return `403 "You don't have write rights for this account."` on
+   > create. Find the correct ID in the team admin URL:
+   > `https://caltopo.com/group/{team_id}/admin/details`. If you have several teams
+   > or sub-teams, use the one you actually want new maps to land in (the same value
+   > your Node-RED flow passes as `caltopoTeamId` / `mapMissionTeamFolder`).
 4. **Remove any `api.caltopo.com` / `caltopo.com` entry** you may have added to
    the CloudTAK CSP `connect-src` allowlist — it is unnecessary. The browser only
    talks to Node-RED, whose host is already allowed.
@@ -135,7 +146,7 @@ env vars on the Node-RED host instead and the proxy will fall back to them:
 
 - `CALTOPO_CREDENTIAL_ID`
 - `CALTOPO_CREDENTIAL_KEY`
-- `CALTOPO_ACCOUNT_ID`
+- `CALTOPO_ACCOUNT_ID` (the writable Team/Folder ID described above)
 
 (The proxy reads body-provided credentials first, then these env vars.) If you go
 env-only, ask to have the plugin stop forwarding credentials in the request body.
