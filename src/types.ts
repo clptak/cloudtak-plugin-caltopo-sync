@@ -51,6 +51,9 @@ export interface CaltopoSettings {
 export interface CaltopoMapOption {
     id: string;
     name: string;
+    // CalTopo epoch-ms timestamps (when available) used to order the picker.
+    created?: number;
+    updated?: number;
 }
 
 // Minimal GeoJSON shapes used when constructing the CalTopo map-create body.

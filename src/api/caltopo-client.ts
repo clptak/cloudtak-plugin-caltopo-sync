@@ -121,11 +121,34 @@ function extractCollaborativeMaps(parsed: unknown): CaltopoMapOption[] {
         const id = typeof f.id === 'string' ? f.id : '';
         if (!id) continue;
         const title = typeof props.title === 'string' && props.title ? props.title : id;
-        maps.push({ id, name: title });
+        maps.push({
+            id,
+            name: title,
+            created: toEpochMs(props.created),
+            updated: toEpochMs(props.updated),
+        });
     }
 
-    maps.sort((a, b) => a.name.localeCompare(b.name));
+    // Newest first: order by created time, falling back to last-modified, then
+    // name so maps without timestamps stay deterministically ordered.
+    maps.sort((a, b) => {
+        const aTime = a.created ?? a.updated ?? 0;
+        const bTime = b.created ?? b.updated ?? 0;
+        if (aTime !== bTime) return bTime - aTime;
+        return a.name.localeCompare(b.name);
+    });
     return maps;
+}
+
+// CalTopo timestamps arrive as epoch milliseconds (sometimes serialized as a
+// string); coerce to a finite number or undefined if absent/unparseable.
+function toEpochMs(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const n = Number(value);
+        if (Number.isFinite(n)) return n;
+    }
+    return undefined;
 }
 
 // CalTopo returns the created map under `result` (with `id`); be defensive
