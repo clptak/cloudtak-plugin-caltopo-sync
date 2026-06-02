@@ -198,6 +198,74 @@
         </div>
 
         <div class='card mt-3'>
+            <div
+                class='card-header cursor-pointer'
+                role='button'
+                @click='downloadGeojsonOpen = !downloadGeojsonOpen'
+            >
+                <div class='card-title'>
+                    Download Caltopo-friendly GeoJSON File
+                </div>
+                <div class='ms-auto'>
+                    <IconChevronDown
+                        :size='20'
+                        stroke='1'
+                        class='create-map-chevron'
+                        :class='{ "create-map-chevron-open": downloadGeojsonOpen }'
+                    />
+                </div>
+            </div>
+            <div
+                v-show='downloadGeojsonOpen'
+                class='card-body'
+            >
+                <p class='text-muted'>
+                    Download a TAK Mission's features as GeoJSON, rewritten for Caltopo:
+                    every <code>callsign</code> key becomes <code>title</code>, every
+                    <code>remarks</code> key becomes <code>description</code>, and each
+                    point's TAK icon is translated to a Caltopo <code>marker-symbol</code>.
+                    The file is saved with a <code>.json</code> extension.
+                </p>
+                <div class='mb-3'>
+                    <label class='form-label'>TAK Mission</label>
+                    <select
+                        v-model='downloadMissionId'
+                        class='form-select'
+                        :disabled='missionsLoading'
+                    >
+                        <option value=''>
+                            {{ missionsLoading ? 'Loading missions…' : 'Select a mission…' }}
+                        </option>
+                        <option
+                            v-for='m in missions'
+                            :key='m.guid'
+                            :value='m.guid'
+                        >
+                            {{ m.name }}
+                        </option>
+                    </select>
+                </div>
+                <button
+                    type='button'
+                    class='btn btn-primary'
+                    :disabled='downloadingGeojson || !downloadMissionId'
+                    @click='downloadCaltopoGeojson'
+                >
+                    <IconDownload
+                        :size='18'
+                        stroke='1'
+                    />
+                    <span class='ms-2'>{{ downloadingGeojson ? 'Preparing…' : 'Download GeoJSON' }}</span>
+                </button>
+                <TablerAlert
+                    v-if='downloadGeojsonError'
+                    class='mt-3'
+                    :err='downloadGeojsonError'
+                />
+            </div>
+        </div>
+
+        <div class='card mt-3'>
             <div class='card-header d-flex align-items-center'>
                 <div class='card-title'>
                     Pairs
@@ -379,11 +447,15 @@ import {
     IconChevronDown,
     IconAmbulance,
     IconMap,
+    IconDownload,
 } from '@tabler/icons-vue';
 import Subscription from '../../../../src/base/subscription.ts';
 import type { Mission, MissionLayerList } from '../../../../src/types.ts';
+import { std, stdurl } from '../../../../src/std.ts';
 import { useMapStore } from '../../../../src/stores/map.ts';
 import ProfileConfig from '../../../../src/base/profile.ts';
+import { renameKeysDeep } from '../lib/geojson.ts';
+import { applyCaltopoMarkerSymbols } from '../lib/icons.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,
@@ -534,6 +606,54 @@ async function createCaltopoMapHandler() {
     } finally {
         creatingMap.value = false;
     }
+}
+
+// "Download Caltopo-friendly GeoJSON File" accordion — collapsed by default.
+// Pulls a TAK mission's features and rewrites property keys so Caltopo accepts
+// them (callsign -> title, remarks -> description), then saves a .json file.
+const downloadGeojsonOpen = ref(false);
+const downloadMissionId = ref<string>('');
+const downloadingGeojson = ref(false);
+const downloadGeojsonError = ref<Error | undefined>();
+
+async function downloadCaltopoGeojson() {
+    downloadGeojsonError.value = undefined;
+    if (!downloadMissionId.value) return;
+
+    downloadingGeojson.value = true;
+    try {
+        // Raw mission GeoJSON; the bearer token is attached by std() automatically.
+        const url = stdurl(`/api/marti/missions/${encodeURIComponent(downloadMissionId.value)}/cot`);
+        const collection = await std(url) as Record<string, unknown>;
+
+        const transformed = renameKeysDeep(collection, {
+            callsign: 'title',
+            remarks: 'description',
+        });
+
+        // Look up each TAK icon and stamp the Caltopo marker-symbol before download.
+        applyCaltopoMarkerSymbols(transformed);
+
+        const mission = missions.value.find((m: Mission) => m.guid === downloadMissionId.value);
+        const baseName = (mission?.name || 'mission').replace(/[^\w.-]+/g, '_');
+        triggerJsonDownload(transformed, `${baseName}.json`);
+    } catch (err) {
+        downloadGeojsonError.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+        downloadingGeojson.value = false;
+    }
+}
+
+function triggerJsonDownload(data: unknown, filename: string) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const href = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(href);
 }
 
 const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string }>({
