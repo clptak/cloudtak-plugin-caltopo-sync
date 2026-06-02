@@ -24,6 +24,19 @@ Build: `cd web && npm install && npm run lint && npm run check && npm run build`
 (all four must pass). Then `docker compose build && docker compose up -d`,
 hard-refresh browser.
 
+**Docker `vue-tsc` fails on `jspdf` (Skydio plugin):** If `WEB_PLUGINS` includes the
+Skydio plugin, `plugins/skydio/utils/preflightPdf.ts` imports `jspdf`, but the
+CloudTAK image only runs `npm install` in `api/web/` — plugin `package.json`
+dependencies are not installed. Add `jspdf` to the **host** tree before building:
+
+    # in your CloudTAK checkout (or a Dockerfile layer before npm run check)
+    cd api/web && npm install jspdf@^4.2.1 --save
+
+Upstream `api/web/package.json` (v13.5.0) does not list `jspdf` yet. Until it does,
+patch the host `package.json` in the source your `tak-stack` / `cloudtak-api` image
+uses, or temporarily drop the Skydio URL from `WEB_PLUGINS`. Caltopo-sync only
+contributes ESLint warnings, not this error.
+
 ## 2. Browser ⟷ Node-RED (same-origin via Caddy)
 
 Plugin is browser-side JS; it calls `/sync/health|pairs|run`. Base URL must be

@@ -347,9 +347,9 @@
                                         />
                                     </button>
                                     <div
+                                        v-tooltip='`Auto-sync every N seconds (min ${AUTO_SYNC_MIN_SECONDS}s). Skips ticks while a previous run is still in flight.`'
                                         class='input-group input-group-sm'
                                         style='width: 180px'
-                                        v-tooltip='`Auto-sync every N seconds (min ${AUTO_SYNC_MIN_SECONDS}s). Skips ticks while a previous run is still in flight.`'
                                     >
                                         <span class='input-group-text'>Every</span>
                                         <input
@@ -360,7 +360,7 @@
                                             :value='intervalDraft[pair.id] ?? store.autoSyncIntervalByPair[pair.id] ?? AUTO_SYNC_MIN_SECONDS'
                                             :disabled='store.isAutoSyncing(pair.id)'
                                             @input='onIntervalInput(pair.id, ($event.target as HTMLInputElement).value)'
-                                        />
+                                        >
                                         <span class='input-group-text'>s</span>
                                         <button
                                             v-if='!store.isAutoSyncing(pair.id)'
