@@ -1,5 +1,9 @@
 <template>
     <MenuTemplate name='Caltopo Sync'>
+        <template #title>
+            <SartopoCloudtakIcon :size='28' />
+            <span class='strong user-select-none'>Caltopo Sync</span>
+        </template>
         <template #default>
             <TablerPillGroup
                 v-model='activeTab'
@@ -34,7 +38,8 @@ import {
     IconCircleX,
     IconRefresh,
 } from '@tabler/icons-vue';
-import MenuTemplate from '@/components/CloudTAK/util/MenuTemplate.vue';
+import MenuTemplate from './MenuTemplate.vue';
+import SartopoCloudtakIcon from './SartopoCloudtakIcon.vue';
 import SettingsPanel from './SettingsPanel.vue';
 import PairManager from './PairManager.vue';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
