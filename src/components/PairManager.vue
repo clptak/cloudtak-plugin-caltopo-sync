@@ -1,5 +1,5 @@
 <template>
-    <div class='col-12 py-3'>
+    <div class='col-12 py-3 caltopo-sync-panel'>
         <div class='card'>
             <div class='card-header'>
                 <div class='card-title'>
@@ -868,6 +868,14 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
 </script>
 
 <style scoped>
+.caltopo-sync-panel :deep(.card) {
+    border-color: #CE5F32;
+}
+
+.caltopo-sync-panel :deep(.card-header) {
+    border-bottom-color: #CE5F32;
+}
+
 .spin-animation {
     animation: caltopo-sync-spin 1s linear infinite;
 }
