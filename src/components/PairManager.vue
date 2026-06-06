@@ -420,6 +420,29 @@
             </div>
         </div>
 
+        <div class='card mt-3'>
+            <div
+                class='card-header cursor-pointer d-flex align-items-center'
+                role='button'
+                @click='settingsOpen = !settingsOpen'
+            >
+                <div class='card-title'>
+                    Settings
+                </div>
+                <div class='ms-auto'>
+                    <IconChevronDown
+                        :size='20'
+                        stroke='1'
+                        class='create-map-chevron'
+                        :class='{ "create-map-chevron-open": settingsOpen }'
+                    />
+                </div>
+            </div>
+            <div v-show='settingsOpen'>
+                <SettingsPanel embedded />
+            </div>
+        </div>
+
         <SyncResultDialog
             v-if='dialogResult'
             :result='dialogResult'
@@ -467,6 +490,7 @@ import { buildCreateMapBody, createCaltopoMap, listCaltopoMaps } from '../api/ca
 import { parseCoordinates } from '../lib/coordinates.ts';
 import type { Pair, SyncResult, CaltopoMapOption } from '../types.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
+import SettingsPanel from './SettingsPanel.vue';
 
 const store = useCaltopoSyncStore();
 const mapStore = useMapStore();
@@ -522,6 +546,7 @@ async function loadCaltopoMaps() {
 // body from the entered coordinates + DR/Activity number, signs it, and POSTs
 // directly to CalTopo using the credentials saved in Settings.
 const createMapOpen = ref(false);
+const settingsOpen = ref(false);
 const creatingMap = ref(false);
 const createMapForm = ref<{ call_location: string; dr_or_activity: string }>({
     call_location: '',

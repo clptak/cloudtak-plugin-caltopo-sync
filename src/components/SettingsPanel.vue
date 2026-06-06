@@ -1,5 +1,5 @@
 <template>
-    <div class='col-12 py-3'>
+    <div :class='embedded ? "settings-panel-embedded" : "col-12 py-3"'>
         <div class='card mb-3'>
             <div class='card-header'>
                 <div class='card-title'>
@@ -177,6 +177,13 @@ const HealthRow = defineComponent({
     },
 });
 
+const props = defineProps({
+    embedded: {
+        type: Boolean,
+        default: false,
+    },
+});
+
 const store = useCaltopoSyncStore();
 const localUrl = ref<string>(store.noderedUrl);
 const testing = ref(false);
@@ -212,6 +219,14 @@ async function resolveUsername(): Promise<string> {
 onMounted(async () => {
     currentUsername.value = await resolveUsername();
     caltopo.value = { ...store.loadCaltopoSettings(currentUsername.value) };
+
+    if (store.noderedUrl && !store.lastHealth) {
+        try {
+            store.setLastHealth(await health());
+        } catch {
+            store.setLastHealth(null);
+        }
+    }
 });
 
 async function saveCaltopo() {
@@ -253,3 +268,9 @@ async function saveAndTest() {
     }
 }
 </script>
+
+<style scoped>
+.settings-panel-embedded {
+    padding: 1rem;
+}
+</style>
