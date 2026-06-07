@@ -177,7 +177,7 @@ const HealthRow = defineComponent({
     },
 });
 
-const props = defineProps({
+defineProps({
     embedded: {
         type: Boolean,
         default: false,
