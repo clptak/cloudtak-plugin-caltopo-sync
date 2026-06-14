@@ -3,6 +3,9 @@
 This directory ships the importable Node-RED flow and one-shot SQL migration
 that expose the HTTP contract the CloudTAK plugin calls (see `endpoints.md`).
 
+**Production VPS updates** (plugin + Node-RED, tak-stack paths): see
+[`docs/vps-update-guide.md`](../docs/vps-update-guide.md).
+
 The bridge is **mostly additive** — see "What this import modifies" below for
 the two legacy nodes whose wire-lists are touched. The legacy
 `GET /api/CalTAKsync` endpoint continues to work unchanged after import.
