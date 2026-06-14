@@ -99,6 +99,25 @@
                     </div>
                 </div>
                 <div class='mt-2'>
+                    <label class='form-label'>Sync mode</label>
+                    <select
+                        v-model='form.sync_mode'
+                        class='form-select'
+                    >
+                        <option
+                            v-for='opt in SYNC_MODE_OPTIONS'
+                            :key='opt.value'
+                            :value='opt.value'
+                        >
+                            {{ opt.label }}
+                        </option>
+                    </select>
+                    <div
+                        class='form-hint text-muted small mt-1'
+                        v-text='syncModeHint(form.sync_mode)'
+                    />
+                </div>
+                <div class='mt-2'>
                     <TablerInput
                         v-model='form.label'
                         label='Label (optional)'
@@ -298,6 +317,7 @@
                     <thead>
                         <tr>
                             <th>Label</th>
+                            <th>Mode</th>
                             <th>Caltopo Map</th>
                             <th>TAK Mission</th>
                             <th>Last Sync</th>
@@ -312,6 +332,23 @@
                             :key='pair.id'
                         >
                             <td v-text='pair.label || "—"' />
+                            <td>
+                                <select
+                                    class='form-select form-select-sm'
+                                    style='min-width: 11rem'
+                                    :value='pair.sync_mode ?? "bidirectional"'
+                                    :disabled='updatingPairId === pair.id || syncingId === pair.id'
+                                    @change='onSyncModeChange(pair, ($event.target as HTMLSelectElement).value as SyncMode)'
+                                >
+                                    <option
+                                        v-for='opt in SYNC_MODE_OPTIONS'
+                                        :key='opt.value'
+                                        :value='opt.value'
+                                    >
+                                        {{ opt.shortLabel }}
+                                    </option>
+                                </select>
+                            </td>
                             <td>
                                 <code v-text='pair.caltopo_map_id' />
                             </td>
@@ -343,9 +380,22 @@
                                         />
                                         <span
                                             class='ms-1'
-                                            v-text='syncingId === pair.id ? "Syncing… (up to 30s)" : "Sync Now"'
+                                            v-text='syncingId === pair.id ? "Syncing… (up to 30s)" : syncButtonLabel(pair.sync_mode)'
                                         />
                                     </button>
+                                    <label
+                                        v-tooltip='"Re-pushes every feature: clears the sync database for this map and re-subscribes to the mission. Use after a mission was recreated or emptied."'
+                                        class='form-check form-check-inline mb-0'
+                                    >
+                                        <input
+                                            type='checkbox'
+                                            class='form-check-input'
+                                            :disabled='syncingId === pair.id'
+                                            :checked='forceResync[pair.id] === true'
+                                            @change='forceResync = { ...forceResync, [pair.id]: ($event.target as HTMLInputElement).checked }'
+                                        >
+                                        <span class='form-check-label'>Force full resync</span>
+                                    </label>
                                     <div
                                         v-tooltip='`Auto-sync every N seconds (min ${AUTO_SYNC_MIN_SECONDS}s). Skips ticks while a previous run is still in flight.`'
                                         class='input-group input-group-sm'
@@ -483,12 +533,13 @@ import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import {
     listPairs,
     createPair,
+    updatePair,
     deletePair,
     runSync,
 } from '../api/nodered-client.ts';
 import { buildCreateMapBody, createCaltopoMap, listCaltopoMaps } from '../api/caltopo-client.ts';
 import { parseCoordinates } from '../lib/coordinates.ts';
-import type { Pair, SyncResult, CaltopoMapOption } from '../types.ts';
+import type { Pair, SyncMode, SyncResult, CaltopoMapOption } from '../types.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
 import SettingsPanel from './SettingsPanel.vue';
 
@@ -681,20 +732,46 @@ function triggerJsonDownload(data: unknown, filename: string) {
     window.URL.revokeObjectURL(href);
 }
 
-const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string }>({
+const SYNC_MODE_OPTIONS: { value: SyncMode; label: string; shortLabel: string }[] = [
+    { value: 'bidirectional', label: 'Bidirectional (both ways)', shortLabel: 'Both ways' },
+    { value: 'tak_to_caltopo', label: 'One-way: TAK → CalTopo', shortLabel: 'TAK → CalTopo' },
+    { value: 'caltopo_to_tak', label: 'One-way: CalTopo → TAK', shortLabel: 'CalTopo → TAK' },
+];
+
+function syncModeHint(mode: SyncMode): string {
+    if (mode === 'tak_to_caltopo') {
+        return 'Pushes mission features onto the CalTopo map. CalTopo-only markers are never removed.';
+    }
+    if (mode === 'caltopo_to_tak') {
+        return 'Pushes map features into the TAK mission. Mission-only items are never removed.';
+    }
+    return 'Syncs both directions. Items removed from CalTopo are removed from the mission.';
+}
+
+function syncButtonLabel(mode?: SyncMode): string {
+    if (mode === 'tak_to_caltopo') return 'Push to CalTopo';
+    if (mode === 'caltopo_to_tak') return 'Pull to TAK';
+    return 'Sync Now';
+}
+
+const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string; sync_mode: SyncMode }>({
     caltopo_map_id: '',
     tak_mission_id: '',
     label: '',
+    sync_mode: 'bidirectional',
 });
 const saving = ref(false);
 const formError = ref<Error | undefined>();
 
 const syncingId = ref<number | null>(null);
+const updatingPairId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
 const dialogResult = ref<SyncResult | null>(null);
 
 const AUTO_SYNC_MIN_SECONDS = 30;
 const intervalDraft = ref<Record<number, number>>({});
+// Per-pair "Force full resync" toggle. Never sticky: reset to OFF after each run.
+const forceResync = ref<Record<number, boolean>>({});
 
 function onIntervalInput(pairId: number, raw: string) {
     const n = parseInt(raw, 10);
@@ -779,9 +856,10 @@ async function submit() {
             caltopo_map_id: form.value.caltopo_map_id.trim(),
             tak_mission_id: form.value.tak_mission_id,
             label: form.value.label.trim() || undefined,
+            sync_mode: form.value.sync_mode,
         });
         pairs.value = [...(Array.isArray(pairs.value) ? pairs.value : []), created];
-        form.value = { caltopo_map_id: '', tak_mission_id: '', label: '' };
+        form.value = { caltopo_map_id: '', tak_mission_id: '', label: '', sync_mode: 'bidirectional' };
     } catch (err) {
         formError.value = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -789,10 +867,27 @@ async function submit() {
     }
 }
 
+async function onSyncModeChange(pair: Pair, sync_mode: SyncMode) {
+    const current = pair.sync_mode ?? 'bidirectional';
+    if (current === sync_mode) return;
+
+    updatingPairId.value = pair.id;
+    listError.value = undefined;
+    try {
+        const updated = await updatePair(pair.id, { sync_mode });
+        pairs.value = pairs.value.map((p) => (p.id === pair.id ? updated : p));
+    } catch (err) {
+        listError.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+        updatingPairId.value = null;
+    }
+}
+
 async function syncNow(pair: Pair) {
     syncingId.value = pair.id;
+    const force = forceResync.value[pair.id] === true;
     try {
-        const result = await runSync(pair);
+        const result = await runSync(pair, { force });
         store.setLastSync(pair.id, result);
         dialogResult.value = result;
 
@@ -807,6 +902,10 @@ async function syncNow(pair: Pair) {
         listError.value = err instanceof Error ? err : new Error(String(err));
     } finally {
         syncingId.value = null;
+        // Force should never persist across runs.
+        if (forceResync.value[pair.id]) {
+            forceResync.value = { ...forceResync.value, [pair.id]: false };
+        }
     }
 }
 

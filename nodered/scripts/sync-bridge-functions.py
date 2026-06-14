@@ -35,6 +35,9 @@ from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parents[1] / "flow-export.json"
 BRIDGE_TAB_LABEL = "Caltopo Sync Plugin Bridge"
+ENGINE_TAB_LABEL = "Caltopo <-> TAK"
+# Engine-tab function names that one-way sync patches (matched by unique name).
+ENGINE_FUNC_NAMES = frozenset({"Extract Sync Params", "Set Delete Query"})
 
 
 def main() -> int:
@@ -61,6 +64,14 @@ def main() -> int:
         (n for n in target if n.get("type") == "tab" and n.get("label") == BRIDGE_TAB_LABEL),
         None,
     )
+    engine_tab = next(
+        (n for n in source if n.get("type") == "tab" and n.get("label") == ENGINE_TAB_LABEL),
+        None,
+    )
+    tgt_engine_tab = next(
+        (n for n in target if n.get("type") == "tab" and n.get("label") == ENGINE_TAB_LABEL),
+        None,
+    )
     if not src_tab:
         print(f"Source flow-export.json missing tab labeled {BRIDGE_TAB_LABEL!r}", file=sys.stderr)
         return 1
@@ -76,10 +87,24 @@ def main() -> int:
         n for n in source
         if n.get("type") == "function" and n.get("z") == src_tab_id
     ]
+    if engine_tab:
+        src_fns.extend(
+            n for n in source
+            if n.get("type") == "function"
+            and n.get("z") == engine_tab["id"]
+            and n.get("name") in ENGINE_FUNC_NAMES
+        )
     tgt_fns = [
         n for n in target
         if n.get("type") == "function" and n.get("z") == tgt_tab_id
     ]
+    if tgt_engine_tab:
+        tgt_fns.extend(
+            n for n in target
+            if n.get("type") == "function"
+            and n.get("z") == tgt_engine_tab["id"]
+            and n.get("name") in ENGINE_FUNC_NAMES
+        )
     # Name-based matching is safe ONLY when a name uniquely identifies one
     # function node in both source AND target. If the same name appears more
     # than once on either side, blindly matching by name + first-wins would

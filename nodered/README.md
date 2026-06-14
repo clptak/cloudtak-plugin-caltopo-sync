@@ -15,6 +15,7 @@ the two legacy nodes whose wire-lists are touched. The legacy
 - `caltopo-proxy-flow.json` — standalone importable tab ("Caltopo Proxy")
   exposing `POST /sync/caltopo`, a generic server-side CalTopo proxy. See below.
 - `migration.sql` — creates the `sync_pairs` table.
+- `migration-sync-mode.sql` — adds `sync_mode` column for one-way sync (existing installs).
 - `endpoints.md` — full HTTP contract reference.
 
 ## Caltopo Proxy (`POST /sync/caltopo`)
@@ -132,6 +133,8 @@ lives in (the database referenced by the existing `postgresdb` config node
 
 ```bash
 psql "$DATABASE_URL" -f migration.sql
+# If sync_pairs already exists from an earlier install:
+psql "$DATABASE_URL" -f migration-sync-mode.sql
 ```
 
 ## Import steps

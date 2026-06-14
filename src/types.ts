@@ -1,8 +1,11 @@
+export type SyncMode = 'bidirectional' | 'tak_to_caltopo' | 'caltopo_to_tak';
+
 export interface Pair {
     id: number;
     caltopo_map_id: string;
     tak_mission_id: string;
     label?: string;
+    sync_mode?: SyncMode;
     last_sync_at?: string | null;
     last_result?: SyncResult | null;
 }
@@ -10,6 +13,8 @@ export interface Pair {
 export interface SyncRequest {
     caltopo_map_id: string;
     tak_mission_id: string;
+    sync_mode?: SyncMode;
+    force?: boolean;
 }
 
 export interface SyncResult {
@@ -22,6 +27,7 @@ export interface SyncResult {
     _signal?: {
         caltopo_synthetic?: boolean;
         tak_synthetic?: boolean;
+        mode?: SyncMode;
     };
 }
 
@@ -36,10 +42,16 @@ export interface NodeRedConfig {
     baseUrl: string;
 }
 
+export interface UpdatePairBody {
+    sync_mode?: SyncMode;
+    label?: string;
+}
+
 export interface CreatePairBody {
     caltopo_map_id: string;
     tak_mission_id: string;
     label?: string;
+    sync_mode?: SyncMode;
 }
 
 export interface CaltopoSettings {

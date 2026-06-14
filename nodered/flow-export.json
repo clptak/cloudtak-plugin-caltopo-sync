@@ -20,7 +20,7 @@
         "type": "tab",
         "label": "Caltopo Sync Plugin Bridge",
         "disabled": false,
-        "info": "Importable bridge tab exposing the Phase 2 plugin HTTP contract.\n\nEndpoints:\n  POST   /sync/run\n  GET    /sync/pairs\n  POST   /sync/pairs\n  DELETE /sync/pairs/:id\n  GET    /sync/health\n\nThe bridge is mostly additive. The legacy GET /api/CalTAKsync flow on the\n'Caltopo <-> TAK' tab is left untouched. The ONLY modifications to legacy\nnodes are wire-list appends on two existing terminal debug nodes\n(sync04caltopoDebug, sync09takDebug) so the bridge can observe per-feature\ncompletion signals. See README.md \u2192 'What this import modifies'.\n\nThe POST /sync/run path triggers the existing fan-out change node\na075cdac694b8631, then waits for real per-feature completion signals\n(via link-in cab1700800000003) and aggregates counts before responding\nsynchronously. No polling.\n\nPostgres operations reference the existing postgresdb config node 0401336095afd0b1\n(POSTGRES_HOST/POSTGRES_DB env-driven). On import, Node-RED will prompt if the\nconfig node id is not present locally.",
+        "info": "Importable bridge tab exposing the Phase 2 plugin HTTP contract.\n\nEndpoints:\n  POST   /sync/run\n  GET    /sync/pairs\n  POST   /sync/pairs\n  PATCH  /sync/pairs/:id\n  DELETE /sync/pairs/:id\n  GET    /sync/health\n\nThe bridge is mostly additive. The legacy GET /api/CalTAKsync flow on the\n'Caltopo <-> TAK' tab is left untouched. The ONLY modifications to legacy\nnodes are wire-list appends on two existing terminal debug nodes\n(sync04caltopoDebug, sync09takDebug) so the bridge can observe per-feature\ncompletion signals. See README.md \u2192 'What this import modifies'.\n\nThe POST /sync/run path triggers the existing fan-out change node\na075cdac694b8631, then waits for real per-feature completion signals\n(via link-in cab1700800000003) and aggregates counts before responding\nsynchronously. No polling.\n\nPostgres operations reference the existing postgresdb config node 0401336095afd0b1\n(POSTGRES_HOST/POSTGRES_DB env-driven). On import, Node-RED will prompt if the\nconfig node id is not present locally.",
         "env": []
     },
     {
@@ -3472,7 +3472,7 @@
         "z": "8d455e872c814fd3",
         "g": "d9d5689d929f06e3",
         "name": "Set Delete Query",
-        "func": "const mapID = msg.currentMapId || msg.mapID;\nmsg.currentCaltopoIds = msg.currentCaltopoIds || [];\nif (!mapID) return null;\n\nmsg.payload = `\n    SELECT feature_id,\n           ST_AsGeoJSON(geom)::jsonb AS geom,\n           properties,\n           last_sync_source\n    FROM   public.caltopo_maps\n    WHERE  map_id = $1\n      AND  seen_on_caltopo_at IS NOT NULL`;\nmsg.queryParameters = [mapID];\nreturn msg;",
+        "func": "if (msg.skipDeletes) return null;\nconst mapID = msg.currentMapId || msg.mapID;\nmsg.currentCaltopoIds = msg.currentCaltopoIds || [];\nif (!mapID) return null;\n\nmsg.payload = `\n    SELECT feature_id,\n           ST_AsGeoJSON(geom)::jsonb AS geom,\n           properties,\n           last_sync_source\n    FROM   public.caltopo_maps\n    WHERE  map_id = $1\n      AND  seen_on_caltopo_at IS NOT NULL`;\nmsg.queryParameters = [mapID];\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3696,7 +3696,7 @@
         "z": "8d455e872c814fd3",
         "g": "d9d5689d929f06e3",
         "name": "Extract Sync Params",
-        "func": "const q = (msg.req && msg.req.query) || {};\nmsg.mapID      = q.mapID      || msg.mapID      || '';\nmsg.takMission = q.takMission || msg.takMission || '';\n// Send immediate 202 response; sync runs async\nconst res = msg.res;\nif (res) {\n    res.status(202).send({ status: 'accepted', mapID: msg.mapID, takMission: msg.takMission });\n    delete msg.res;\n    delete msg.req;\n}\n// Clone for TAK->Caltopo direction\nconst msg2 = Object.assign({}, msg);\nreturn [msg, msg2];",
+        "func": "const q = (msg.req && msg.req.query) || {};\nmsg.mapID      = q.mapID      || msg.mapID      || '';\nmsg.takMission = q.takMission || msg.takMission || '';\nconst mode = msg.syncMode || 'bidirectional';\n// Send immediate 202 response; sync runs async\nconst res = msg.res;\nif (res) {\n    res.status(202).send({ status: 'accepted', mapID: msg.mapID, takMission: msg.takMission, syncMode: mode });\n    delete msg.res;\n    delete msg.req;\n}\nif (mode === 'tak_to_caltopo') {\n    return [null, msg];\n}\nif (mode === 'caltopo_to_tak') {\n    return [msg, null];\n}\nconst msg2 = Object.assign({}, msg);\nreturn [msg, msg2];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -4453,7 +4453,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "CORS preflight",
-        "func": "msg.statusCode = 204;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Access-Control-Max-Age': '600'\n};\nmsg.payload = '';\nreturn msg;",
+        "func": "msg.statusCode = 204;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Access-Control-Max-Age': '600'\n};\nmsg.payload = '';\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4502,7 +4502,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Validate + concurrency-gate + trigger legacy fan-out",
-        "func": "/* jshint esversion: 8, node: true */\nconst body = msg.payload || {};\nconst mapID = body.caltopo_map_id || body.mapID;\nlet   takMission = body.tak_mission_id || body.takMission;\n\nconst credId = env.get('CALTOPO_CREDENTIAL_ID');\nconst credKey = env.get('CALTOPO_CREDENTIAL_KEY');\n\nconst errors = [];\nif (!mapID) errors.push('caltopo_map_id required');\nif (!takMission) errors.push('tak_mission_id required');\nif (!credId || !credKey) errors.push('Caltopo credentials env vars missing');\n\n// GUID -> TAK-server-side name translation. The legacy flow's\n// \"Create TAK Mission Look Up Table\" builds global.TAK_MISSIONS as\n// { takServerName: guid, ... } and later looks up by name. CloudTAK\n// surfaces missions by GUID with a display name that does not match\n// the TAK Server's name field, so the plugin sends a GUID. We have to\n// reverse-lookup the GUID here before triggering the legacy fan-out.\nconst looksLikeGuid = typeof takMission === 'string'\n    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(takMission);\nif (looksLikeGuid) {\n    const lookup = global.get('TAK_MISSIONS') || {};\n    let resolvedName = null;\n    for (const name of Object.keys(lookup)) {\n        if (lookup[name] === takMission) { resolvedName = name; break; }\n    }\n    if (resolvedName) {\n        takMission = resolvedName;\n    } else {\n        errors.push('tak_mission_id ' + takMission + ' is a GUID but is not in Node-RED TAK_MISSIONS lookup; refresh via the Get Mission List inject node');\n    }\n}\n\n\nif (errors.length) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { added: 0, updated: 0, deleted: 0, conflicts: 0, duration_ms: 0, errors };\n    return [null, msg, null];\n}\n\n// Concurrency gate: one active run per mapID. Returns 409 on overlap.\n// This is a defensive safety net even though correlationId-routing is in use.\nconst activeKey = 'active_run_' + mapID;\nconst existing = flow.get(activeKey);\nconst now = Date.now();\nif (existing && existing.expiresAt > now) {\n    msg.statusCode = 409;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = {\n        added: 0, updated: 0, deleted: 0, conflicts: 0, duration_ms: 0,\n        errors: ['a sync run for this caltopo_map_id is already in progress'],\n        active_correlation_id: existing.correlationId\n    };\n    return [null, msg, null];\n}\n\nconst correlationId = 'run_' + now + '_' + Math.random().toString(36).slice(2, 10);\nconst runStartIso = new Date().toISOString();\nconst runStartMs = now;\nconst overallTimeoutMs = 30000;\n\nflow.set(activeKey, {\n    correlationId,\n    expiresAt: now + overallTimeoutMs + 5000\n});\n\nflow.set('run_' + correlationId, {\n    res: msg.res,\n    req: msg.req,\n    mapID: mapID,\n    takMission: takMission,\n    runStartIso: runStartIso,\n    runStartMs: runStartMs,\n    activeKey: activeKey,\n    counts: {\n        caltopo_features: 0,\n        tak_features: 0,\n        caltopo_errors: 0,\n        tak_errors: 0\n    },\n    errors: []\n});\n\n// Trigger message: shape matches what change node a075cdac694b8631 expects\n//   payload.mapID, payload.takMission. We deliberately omit msg.res so the\n//   legacy phase1extractParams does not steal our response handle (it inspects\n//   msg.res and replies 202 if present).\nconst trigger = {\n    payload: { mapID: mapID, takMission: takMission },\n    mapID: mapID,\n    takMission: takMission,\n    correlationId: correlationId,\n    _from_plugin_bridge: true\n};\n\n// Overall safety-timeout driver. The completion-signal join has its own\n// internal timeout (set on the join node), but we also emit an explicit\n// timeout message here in case the join never sees either direction emit\n// (e.g. both sides have zero work AND no terminal signal arrives).\nconst timeoutMsg = {\n    correlationId: correlationId,\n    mapID: mapID,\n    runStartIso: runStartIso,\n    runStartMs: runStartMs,\n    _kind: 'overall_timeout'\n};\n\nreturn [trigger, null, timeoutMsg];",
+        "func": "/* jshint esversion: 8, node: true */\nconst body = msg.payload || {};\nconst mapID = body.caltopo_map_id || body.mapID;\nlet   takMission = body.tak_mission_id || body.takMission;\n\nconst credId = env.get('CALTOPO_CREDENTIAL_ID');\nconst credKey = env.get('CALTOPO_CREDENTIAL_KEY');\n\nconst VALID_MODES = new Set(['bidirectional', 'tak_to_caltopo', 'caltopo_to_tak']);\nconst rawMode = body.sync_mode || body.mode || 'bidirectional';\nconst mode = VALID_MODES.has(rawMode) ? rawMode : 'bidirectional';\n\nconst errors = [];\nif (!mapID) errors.push('caltopo_map_id required');\nif (!takMission) errors.push('tak_mission_id required');\nif (!credId || !credKey) errors.push('Caltopo credentials env vars missing');\n\nconst looksLikeGuid = typeof takMission === 'string'\n    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(takMission);\nif (looksLikeGuid) {\n    const lookup = global.get('TAK_MISSIONS') || {};\n    let resolvedName = null;\n    for (const name of Object.keys(lookup)) {\n        if (lookup[name] === takMission) { resolvedName = name; break; }\n    }\n    if (resolvedName) {\n        takMission = resolvedName;\n    } else {\n        errors.push('tak_mission_id ' + takMission + ' is a GUID but is not in Node-RED TAK_MISSIONS lookup; refresh via the Get Mission List inject node');\n    }\n}\n\nif (errors.length) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { added: 0, updated: 0, deleted: 0, conflicts: 0, duration_ms: 0, errors };\n    return [null, msg, null];\n}\n\nconst activeKey = 'active_run_' + mapID;\nconst existing = flow.get(activeKey);\nconst now = Date.now();\nif (existing && existing.expiresAt > now) {\n    msg.statusCode = 409;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = {\n        added: 0, updated: 0, deleted: 0, conflicts: 0, duration_ms: 0,\n        errors: ['a sync run for this caltopo_map_id is already in progress'],\n        active_correlation_id: existing.correlationId\n    };\n    return [null, msg, null];\n}\n\nconst correlationId = 'run_' + now + '_' + Math.random().toString(36).slice(2, 10);\nconst runStartIso = new Date().toISOString();\nconst runStartMs = now;\nconst overallTimeoutMs = 30000;\n\nflow.set(activeKey, {\n    correlationId,\n    expiresAt: now + overallTimeoutMs + 5000\n});\n\nflow.set('run_' + correlationId, {\n    res: msg.res,\n    req: msg.req,\n    mapID: mapID,\n    takMission: takMission,\n    mode: mode,\n    runStartIso: runStartIso,\n    runStartMs: runStartMs,\n    activeKey: activeKey,\n    counts: {\n        caltopo_features: 0,\n        tak_features: 0,\n        caltopo_errors: 0,\n        tak_errors: 0\n    },\n    errors: []\n});\n\nconst trigger = {\n    payload: { mapID: mapID, takMission: takMission },\n    mapID: mapID,\n    takMission: takMission,\n    correlationId: correlationId,\n    syncMode: mode,\n    skipDeletes: mode !== 'bidirectional',\n    _from_plugin_bridge: true\n};\n\nconst timeoutMsg = {\n    correlationId: correlationId,\n    mapID: mapID,\n    runStartIso: runStartIso,\n    runStartMs: runStartMs,\n    _kind: 'overall_timeout'\n};\n\nreturn [trigger, null, timeoutMsg];",
         "outputs": 3,
         "timeout": 0,
         "noerr": 0,
@@ -4601,7 +4601,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Direction done \u2192 join",
-        "func": "/* jshint esversion: 8, node: true */\n// Trigger node fires this after 3s of silence on a (correlationId, direction)\n// topic. Re-key for the join node which correlates BOTH directions for the\n// same correlationId.\nconst correlationId = msg.correlationId;\nif (!correlationId) return null;\n\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) return null; // already finalized\n\nmsg.topic = correlationId;\nmsg.payload = {\n    direction: msg._completionDirection,\n    counts: Object.assign({}, ctx.counts)\n};\nreturn msg;",
+        "func": "/* jshint esversion: 8, node: true */\nconst correlationId = msg.correlationId;\nif (!correlationId) return null;\n\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) return null;\n\nconst direction = msg._completionDirection;\nconst activePayload = {\n    direction: direction,\n    counts: Object.assign({}, ctx.counts)\n};\n\nconst mode = ctx.mode || 'bidirectional';\nmsg.topic = correlationId;\n\nif (mode === 'bidirectional') {\n    msg.payload = activePayload;\n    return msg;\n}\n\n// One-way: satisfy join(count=2) by also emitting a skipped signal for the\n// direction we intentionally did not run.\nconst skipped = mode === 'tak_to_caltopo' ? 'caltopo' : 'tak';\nreturn [\n    {\n        topic: correlationId,\n        payload: {\n            direction: skipped,\n            counts: Object.assign({}, ctx.counts),\n            synthetic: true,\n            skipped: true\n        }\n    },\n    {\n        topic: correlationId,\n        payload: activePayload\n    }\n];",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4646,7 +4646,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Synthesize missing-direction signals",
-        "func": "/* jshint esversion: 8, node: true */\n// Fired 30s after run start. If the join has not already finalized the run\n// (i.e. flow.get('run_<id>') still exists), emit synthetic done-signals\n// ONLY for directions that have NOT received any real per-feature signals.\n// A direction with zero real work to do is the common case (e.g. all changes\n// only on the caltopo side); that direction simply never fires a terminal\n// signal and would hang the join forever without this synthetic backstop.\n// But we must not overwrite real signals from the other direction.\nconst correlationId = msg.correlationId;\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) return null; // already finalized\n\nctx.timedOut = true;\nflow.set('run_' + correlationId, ctx);\n\nconst mkSignal = (direction) => ({\n    correlationId: correlationId,\n    topic: correlationId,\n    payload: {\n        direction: direction,\n        counts: Object.assign({}, ctx.counts),\n        synthetic: true\n    }\n});\n\nconst out = [];\nif ((ctx.counts.caltopo_features || 0) === 0) out.push(mkSignal('caltopo'));\nif ((ctx.counts.tak_features     || 0) === 0) out.push(mkSignal('tak'));\nreturn out.length ? [out] : null;\n",
+        "func": "/* jshint esversion: 8, node: true */\nconst correlationId = msg.correlationId;\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) return null;\n\nctx.timedOut = true;\nflow.set('run_' + correlationId, ctx);\n\nconst mode = ctx.mode || 'bidirectional';\n\nconst mkSignal = (direction, extra) => ({\n    correlationId: correlationId,\n    topic: correlationId,\n    payload: Object.assign({\n        direction: direction,\n        counts: Object.assign({}, ctx.counts),\n        synthetic: true\n    }, extra || {})\n});\n\nconst out = [];\n\nif (mode === 'bidirectional') {\n    if ((ctx.counts.caltopo_features || 0) === 0) out.push(mkSignal('caltopo'));\n    if ((ctx.counts.tak_features     || 0) === 0) out.push(mkSignal('tak'));\n} else if (mode === 'tak_to_caltopo') {\n    out.push(mkSignal('caltopo', { skipped: true }));\n    if ((ctx.counts.tak_features || 0) === 0) out.push(mkSignal('tak'));\n} else if (mode === 'caltopo_to_tak') {\n    out.push(mkSignal('tak', { skipped: true }));\n    if ((ctx.counts.caltopo_features || 0) === 0) out.push(mkSignal('caltopo'));\n}\n\nreturn out.length ? [out] : null;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4694,7 +4694,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Finalize response \u2192 stale-delete SQL",
-        "func": "/* jshint esversion: 8, node: true */\n// Both directions have reported done (or the safety timeout synthesized\n// signals). Read counts from flow context, build the response body, and\n// hand off to the stale-delete postgres step (which will also stamp\n// last_sync_at on sync_pairs and finalize the response).\n\nconst grouped = msg.payload || {};\nconst correlationId = (msg.topic || '').toString();\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) {\n    // Already finalized by a previous path; drop silently.\n    return null;\n}\n\n// Release the per-mapID concurrency lock.\nif (ctx.activeKey) flow.set(ctx.activeKey, undefined);\n\nconst durationMs = Date.now() - (ctx.runStartMs || Date.now());\n\nconst caltopoCounts = (grouped.caltopo && grouped.caltopo.counts) || ctx.counts;\nconst takCounts     = (grouped.tak     && grouped.tak.counts)     || ctx.counts;\nconst syntheticCaltopo = grouped.caltopo && grouped.caltopo.synthetic;\nconst syntheticTak     = grouped.tak     && grouped.tak.synthetic;\n\nconst errors = [];\nif (ctx.timedOut) {\n    errors.push('overall safety timeout (30s) elapsed; one or both directions may not have completed');\n}\nif ((caltopoCounts.caltopo_errors || 0) > 0) {\n    errors.push((caltopoCounts.caltopo_errors || 0) + ' caltopo-direction HTTP errors');\n}\nif ((takCounts.tak_errors || 0) > 0) {\n    errors.push((takCounts.tak_errors || 0) + ' tak-direction HTTP errors');\n}\n\nconst body = {\n    added: (caltopoCounts.caltopo_features || 0) + (takCounts.tak_features || 0),\n    updated: 0,\n    deleted: 0,\n    conflicts: 0,\n    duration_ms: durationMs,\n    errors: errors,\n    error_details: (ctx.errorDetails && ctx.errorDetails.length) ? ctx.errorDetails : undefined,\n    _signal: {\n        caltopo_features: caltopoCounts.caltopo_features || 0,\n        tak_features: takCounts.tak_features || 0,\n        caltopo_synthetic: Boolean(syntheticCaltopo),\n        tak_synthetic: Boolean(syntheticTak)\n    }\n};\n\n// SAFETY: when BOTH directions returned only synthetic completion\n// signals we cannot infer staleness reliably (no real terminal\n// signals were observed), so we skip the stale_delete CTE entirely.\n// Without this gate, a run that did zero real work would still\n// delete every row for this map_id because none of them got their\n// seen_on_*_at columns advanced.\nconst skipStaleDelete = Boolean(syntheticCaltopo) && Boolean(syntheticTak);\nif (skipStaleDelete) {\n    if (Array.isArray(body.errors)) {\n        body.errors.push('stale-delete skipped: both directions synthetic; cannot determine staleness');\n    }\n}\n\nmsg.payload = skipStaleDelete ? `\n  WITH conflict_count AS (\n    SELECT count(*) AS n FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND seen_on_caltopo_at >= $2::timestamptz\n       AND seen_on_tak_at     >= $2::timestamptz\n  ),\n  pair_update AS (\n    UPDATE public.sync_pairs\n       SET last_sync_at = now(),\n           last_result  = $3::jsonb\n     WHERE caltopo_map_id = $1\n       AND tak_mission_id = $4\n    RETURNING id\n  )\n  SELECT 0::bigint AS deleted_count,\n         (SELECT n FROM conflict_count) AS conflict_count,\n         (SELECT count(*) FROM pair_update) AS pair_updated;\n` : `\n  WITH stale_delete AS (\n    DELETE FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND COALESCE(seen_on_caltopo_at, 'epoch'::timestamptz) < $2::timestamptz\n       AND COALESCE(seen_on_tak_at,     'epoch'::timestamptz) < $2::timestamptz\n       AND last_sync_source IS NOT NULL\n    RETURNING feature_id\n  ),\n  conflict_count AS (\n    SELECT count(*) AS n FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND seen_on_caltopo_at >= $2::timestamptz\n       AND seen_on_tak_at     >= $2::timestamptz\n  ),\n  pair_update AS (\n    UPDATE public.sync_pairs\n       SET last_sync_at = now(),\n           last_result  = $3::jsonb\n     WHERE caltopo_map_id = $1\n       AND tak_mission_id = $4\n    RETURNING id\n  )\n  SELECT (SELECT count(*) FROM stale_delete) AS deleted_count,\n         (SELECT n FROM conflict_count)      AS conflict_count,\n         (SELECT count(*) FROM pair_update)  AS pair_updated;\n`;\nmsg.queryParameters = [\n    ctx.mapID,\n    ctx.runStartIso,\n    JSON.stringify(body),\n    ctx.takMission\n];\nmsg._responseBody = body;\nmsg._runCtxKey = 'run_' + correlationId;\nmsg._mapID = ctx.mapID;\nmsg._takMission = ctx.takMission;\nmsg.res = ctx.res;\nmsg.req = ctx.req;\nreturn msg;",
+        "func": "/* jshint esversion: 8, node: true */\nconst grouped = msg.payload || {};\nconst correlationId = (msg.topic || '').toString();\nconst ctx = flow.get('run_' + correlationId);\nif (!ctx) {\n    return null;\n}\n\nif (ctx.activeKey) flow.set(ctx.activeKey, undefined);\n\nconst durationMs = Date.now() - (ctx.runStartMs || Date.now());\nconst mode = ctx.mode || 'bidirectional';\n\nconst caltopoCounts = (grouped.caltopo && grouped.caltopo.counts) || ctx.counts;\nconst takCounts     = (grouped.tak     && grouped.tak.counts)     || ctx.counts;\nconst syntheticCaltopo = grouped.caltopo && grouped.caltopo.synthetic;\nconst syntheticTak     = grouped.tak     && grouped.tak.synthetic;\n\nconst errors = [];\nif (ctx.timedOut) {\n    errors.push('overall safety timeout (30s) elapsed; one or both directions may not have completed');\n}\nif ((caltopoCounts.caltopo_errors || 0) > 0) {\n    errors.push((caltopoCounts.caltopo_errors || 0) + ' caltopo-direction HTTP errors');\n}\nif ((takCounts.tak_errors || 0) > 0) {\n    errors.push((takCounts.tak_errors || 0) + ' tak-direction HTTP errors');\n}\n\nconst body = {\n    added: (caltopoCounts.caltopo_features || 0) + (takCounts.tak_features || 0),\n    updated: 0,\n    deleted: 0,\n    conflicts: 0,\n    duration_ms: durationMs,\n    errors: errors,\n    error_details: (ctx.errorDetails && ctx.errorDetails.length) ? ctx.errorDetails : undefined,\n    _signal: {\n        caltopo_features: caltopoCounts.caltopo_features || 0,\n        tak_features: takCounts.tak_features || 0,\n        caltopo_synthetic: Boolean(syntheticCaltopo),\n        tak_synthetic: Boolean(syntheticTak),\n        mode: mode\n    }\n};\n\nconst skipStaleDelete =\n    mode !== 'bidirectional' ||\n    (Boolean(syntheticCaltopo) && Boolean(syntheticTak));\n\nif (skipStaleDelete) {\n    if (mode !== 'bidirectional') {\n        body.errors.push('stale-delete skipped: one-way sync mode');\n    } else if (Array.isArray(body.errors)) {\n        body.errors.push('stale-delete skipped: both directions synthetic; cannot determine staleness');\n    }\n}\n\nmsg.payload = skipStaleDelete ? `\n  WITH conflict_count AS (\n    SELECT count(*) AS n FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND seen_on_caltopo_at >= $2::timestamptz\n       AND seen_on_tak_at     >= $2::timestamptz\n  ),\n  pair_update AS (\n    UPDATE public.sync_pairs\n       SET last_sync_at = now(),\n           last_result  = $3::jsonb\n     WHERE caltopo_map_id = $1\n       AND tak_mission_id = $4\n    RETURNING id\n  )\n  SELECT 0::bigint AS deleted_count,\n         (SELECT n FROM conflict_count) AS conflict_count,\n         (SELECT count(*) FROM pair_update) AS pair_updated;\n` : `\n  WITH stale_delete AS (\n    DELETE FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND COALESCE(seen_on_caltopo_at, 'epoch'::timestamptz) < $2::timestamptz\n       AND COALESCE(seen_on_tak_at,     'epoch'::timestamptz) < $2::timestamptz\n       AND last_sync_source IS NOT NULL\n    RETURNING feature_id\n  ),\n  conflict_count AS (\n    SELECT count(*) AS n FROM public.caltopo_maps\n     WHERE map_id = $1\n       AND seen_on_caltopo_at >= $2::timestamptz\n       AND seen_on_tak_at     >= $2::timestamptz\n  ),\n  pair_update AS (\n    UPDATE public.sync_pairs\n       SET last_sync_at = now(),\n           last_result  = $3::jsonb\n     WHERE caltopo_map_id = $1\n       AND tak_mission_id = $4\n    RETURNING id\n  )\n  SELECT (SELECT count(*) FROM stale_delete) AS deleted_count,\n         (SELECT n FROM conflict_count)      AS conflict_count,\n         (SELECT count(*) FROM pair_update)  AS pair_updated;\n`;\nmsg.queryParameters = [\n    ctx.mapID,\n    ctx.runStartIso,\n    JSON.stringify(body),\n    ctx.takMission\n];\nmsg._responseBody = body;\nmsg._runCtxKey = 'run_' + correlationId;\nmsg._mapID = ctx.mapID;\nmsg._takMission = ctx.takMission;\nmsg.res = ctx.res;\nmsg.req = ctx.req;\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4786,7 +4786,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Build SELECT",
-        "func": "msg.payload = 'SELECT id, caltopo_map_id, tak_mission_id, label, last_sync_at, last_result, created_at FROM public.sync_pairs ORDER BY created_at DESC';\nmsg.queryParameters = [];\nreturn msg;",
+        "func": "msg.payload = 'SELECT id, caltopo_map_id, tak_mission_id, label, sync_mode, last_sync_at, last_result, created_at FROM public.sync_pairs ORDER BY created_at DESC';\nmsg.queryParameters = [];\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4830,7 +4830,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Format JSON",
-        "func": "msg.payload = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.statusCode = 200;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;\n",
+        "func": "msg.payload = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.statusCode = 200;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -4878,7 +4878,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Build INSERT",
-        "func": "const body = msg.payload || {};\nconst caltopo_map_id = body.caltopo_map_id;\nconst tak_mission_id = body.tak_mission_id;\nconst label = body.label || null;\nif (!caltopo_map_id || !tak_mission_id) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { error: 'caltopo_map_id and tak_mission_id required' };\n    return [null, msg];\n}\nmsg.payload = `\n  INSERT INTO public.sync_pairs (caltopo_map_id, tak_mission_id, label)\n  VALUES ($1, $2, $3)\n  ON CONFLICT (caltopo_map_id, tak_mission_id)\n  DO UPDATE SET label = EXCLUDED.label\n  RETURNING id, caltopo_map_id, tak_mission_id, label, last_sync_at, last_result, created_at\n`;\nmsg.queryParameters = [caltopo_map_id, tak_mission_id, label];\nreturn [msg, null];",
+        "func": "const body = msg.payload || {};\nconst caltopo_map_id = body.caltopo_map_id;\nconst tak_mission_id = body.tak_mission_id;\nconst label = body.label || null;\nconst VALID_MODES = new Set(['bidirectional', 'tak_to_caltopo', 'caltopo_to_tak']);\nconst rawMode = body.sync_mode || body.mode || 'bidirectional';\nconst sync_mode = VALID_MODES.has(rawMode) ? rawMode : 'bidirectional';\nif (!caltopo_map_id || !tak_mission_id) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { error: 'caltopo_map_id and tak_mission_id required' };\n    return [null, msg];\n}\nmsg.payload = `\n  INSERT INTO public.sync_pairs (caltopo_map_id, tak_mission_id, label, sync_mode)\n  VALUES ($1, $2, $3, $4)\n  ON CONFLICT (caltopo_map_id, tak_mission_id)\n  DO UPDATE SET label = EXCLUDED.label,\n                sync_mode = EXCLUDED.sync_mode\n  RETURNING id, caltopo_map_id, tak_mission_id, label, sync_mode, last_sync_at, last_result, created_at\n`;\nmsg.queryParameters = [caltopo_map_id, tak_mission_id, label, sync_mode];\nreturn [msg, null];",
         "outputs": 2,
         "timeout": 0,
         "noerr": 0,
@@ -4925,7 +4925,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Format JSON",
-        "func": "if (msg.error) {\n    msg.statusCode = 500;\n    msg.payload = { error: String(msg.error.message || msg.error) };\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n}\nconst row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nmsg.payload = row || {};\nmsg.statusCode = 200;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
+        "func": "if (msg.error) {\n    msg.statusCode = 500;\n    msg.payload = { error: String(msg.error.message || msg.error) };\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n}\nconst row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nmsg.payload = row || {};\nmsg.statusCode = 200;\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -5031,7 +5031,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Format JSON",
-        "func": "const row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nif (!row) {\n    msg.statusCode = 404;\n    msg.payload = { error: 'pair not found' };\n} else {\n    msg.statusCode = 200;\n    msg.payload = { deleted_id: Number(row.id) };\n}\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
+        "func": "const row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nif (!row) {\n    msg.statusCode = 404;\n    msg.payload = { error: 'pair not found' };\n} else {\n    msg.statusCode = 200;\n    msg.payload = { deleted_id: Number(row.id) };\n}\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -5092,7 +5092,7 @@
         "z": "a974d10b134f9933",
         "d": true,
         "name": "Sync health check",
-        "func": "/* jshint esversion: 8, node: true */\n// fs is provided by Setup -> Modules (libs).\n// https comes from settings.js functionGlobalContext.\n//\n// Single sync function that builds the /sync/health response. Returns a Promise\n// for the TAK reachability sub-check (3s timeout), so the overall endpoint\n// still resolves quickly even when TAK is down.\n//\n// Sub-checks:\n//   caltopo_creds_ok  - both env vars set\n//   icon_configs_ok   - /data/icon-configs.json parses\n//   postgis_ok        - v1 no-op (returns true); /sync/pairs already exercises\n//                       postgres so a separate check adds no signal here\n//   tak_reachable     - HEAD probe against https://TAK_SERVER_URL:TAK_HTTPS_API_PORT/\n//                       Any response (incl. 401/403/404) counts as reachable.\n//                       Only DNS failure or 3s timeout marks unreachable.\n\nconst https = global.get('https');\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    const raw = fs.readFileSync('/data/icon-configs.json', 'utf8');\n    JSON.parse(raw);\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nconst buildReply = (takOk) => {\n    msg.payload = {\n        caltopo_creds_ok: credsOk,\n        postgis_ok: true,\n        icon_configs_ok: iconConfigsOk,\n        tak_reachable: takOk\n    };\n    msg.statusCode = 200;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n};\n\nconst takHost = (env.get('TAK_SERVER_URL') || '').replace(/^https?:\\/\\//i, '');\nconst takPort = parseInt(env.get('TAK_HTTPS_API_PORT') || '8446', 10);\n\nif (!takHost || !https) {\n    return buildReply(false);\n}\n\nreturn new Promise((resolve) => {\n    let settled = false;\n    const finish = (ok) => { if (!settled) { settled = true; resolve(buildReply(ok)); } };\n    try {\n        const req = https.request({\n            hostname: takHost,\n            port: takPort,\n            path: '/',\n            method: 'HEAD',\n            timeout: 3000,\n            rejectUnauthorized: false\n        }, () => finish(true));\n        req.on('error', () => finish(false));\n        req.on('timeout', () => { try { req.destroy(); } catch (_) {} finish(false); });\n        req.end();\n    } catch (_) {\n        finish(false);\n    }\n});\n",
+        "func": "/* jshint esversion: 8, node: true */\n// fs is provided by Setup -> Modules (libs).\n// https comes from settings.js functionGlobalContext.\n//\n// Single sync function that builds the /sync/health response. Returns a Promise\n// for the TAK reachability sub-check (3s timeout), so the overall endpoint\n// still resolves quickly even when TAK is down.\n//\n// Sub-checks:\n//   caltopo_creds_ok  - both env vars set\n//   icon_configs_ok   - /data/icon-configs.json parses\n//   postgis_ok        - v1 no-op (returns true); /sync/pairs already exercises\n//                       postgres so a separate check adds no signal here\n//   tak_reachable     - HEAD probe against https://TAK_SERVER_URL:TAK_HTTPS_API_PORT/\n//                       Any response (incl. 401/403/404) counts as reachable.\n//                       Only DNS failure or 3s timeout marks unreachable.\n\nconst https = global.get('https');\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    const raw = fs.readFileSync('/data/icon-configs.json', 'utf8');\n    JSON.parse(raw);\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nconst buildReply = (takOk) => {\n    msg.payload = {\n        caltopo_creds_ok: credsOk,\n        postgis_ok: true,\n        icon_configs_ok: iconConfigsOk,\n        tak_reachable: takOk\n    };\n    msg.statusCode = 200;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n};\n\nconst takHost = (env.get('TAK_SERVER_URL') || '').replace(/^https?:\\/\\//i, '');\nconst takPort = parseInt(env.get('TAK_HTTPS_API_PORT') || '8446', 10);\n\nif (!takHost || !https) {\n    return buildReply(false);\n}\n\nreturn new Promise((resolve) => {\n    let settled = false;\n    const finish = (ok) => { if (!settled) { settled = true; resolve(buildReply(ok)); } };\n    try {\n        const req = https.request({\n            hostname: takHost,\n            port: takPort,\n            path: '/',\n            method: 'HEAD',\n            timeout: 3000,\n            rejectUnauthorized: false\n        }, () => finish(true));\n        req.on('error', () => finish(false));\n        req.on('timeout', () => { try { req.destroy(); } catch (_) {} finish(false); });\n        req.end();\n    } catch (_) {\n        finish(false);\n    }\n});\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -5141,7 +5141,7 @@
         "type": "function",
         "z": "a974d10b134f9933",
         "name": "Sync health check",
-        "func": "/* jshint esversion: 8, node: true */\n// /sync/health builder. TAK reachability = certless HEAD to\n// https://TAK_SERVER_URL:TAK_HTTPS_API_PORT/ ; any response (incl 401/403/404)\n// counts as reachable. Only DNS failure / 3s timeout marks unreachable.\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    JSON.parse(fs.readFileSync('/data/icon-configs.json', 'utf8'));\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nconst buildReply = (takOk) => {\n    msg.payload = {\n        caltopo_creds_ok: credsOk,\n        postgis_ok: true,\n        icon_configs_ok: iconConfigsOk,\n        tak_reachable: takOk\n    };\n    msg.statusCode = 200;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n};\n\nconst takHost = (env.get('TAK_SERVER_URL') || '').replace(/^https?:\\/\\//i, '');\nconst takPort = parseInt(env.get('TAK_HTTPS_API_PORT') || '8446', 10);\n\nif (!takHost || !https) {\n    node.warn('TAK probe early-exit: takHost=' + takHost + ' httpsType=' + (typeof https));\n    return buildReply(false);\n}\n\nnode.warn('TAK probe -> ' + takHost + ':' + takPort + ' (https.request=' + (typeof https.request) + ')');\n\nreturn new Promise((resolve) => {\n    let settled = false;\n    const finish = (ok) => { if (!settled) { settled = true; resolve(buildReply(ok)); } };\n    try {\n        const req = https.request({\n            hostname: takHost,\n            port: takPort,\n            path: '/',\n            method: 'HEAD',\n            timeout: 3000,\n            rejectUnauthorized: false\n        }, (res) => {\n            node.warn('TAK probe OK status ' + res.statusCode);\n            finish(true);\n        });\n        req.on('error', (e) => { node.warn('TAK probe error: ' + e.message); finish(false); });\n        req.on('timeout', () => { node.warn('TAK probe TIMEOUT'); try { req.destroy(); } catch (_) { } finish(false); });\n        req.end();\n    } catch (e) {\n        node.warn('TAK probe threw: ' + e.message);\n        finish(false);\n    }\n});",
+        "func": "/* jshint esversion: 8, node: true */\n// /sync/health builder. TAK reachability = certless HEAD to\n// https://TAK_SERVER_URL:TAK_HTTPS_API_PORT/ ; any response (incl 401/403/404)\n// counts as reachable. Only DNS failure / 3s timeout marks unreachable.\n\nconst credsOk = Boolean(env.get('CALTOPO_CREDENTIAL_ID')) && Boolean(env.get('CALTOPO_CREDENTIAL_KEY'));\n\nlet iconConfigsOk = false;\ntry {\n    JSON.parse(fs.readFileSync('/data/icon-configs.json', 'utf8'));\n    iconConfigsOk = true;\n} catch (e) {\n    iconConfigsOk = false;\n}\n\nconst buildReply = (takOk) => {\n    msg.payload = {\n        caltopo_creds_ok: credsOk,\n        postgis_ok: true,\n        icon_configs_ok: iconConfigsOk,\n        tak_reachable: takOk\n    };\n    msg.statusCode = 200;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n};\n\nconst takHost = (env.get('TAK_SERVER_URL') || '').replace(/^https?:\\/\\//i, '');\nconst takPort = parseInt(env.get('TAK_HTTPS_API_PORT') || '8446', 10);\n\nif (!takHost || !https) {\n    node.warn('TAK probe early-exit: takHost=' + takHost + ' httpsType=' + (typeof https));\n    return buildReply(false);\n}\n\nnode.warn('TAK probe -> ' + takHost + ':' + takPort + ' (https.request=' + (typeof https.request) + ')');\n\nreturn new Promise((resolve) => {\n    let settled = false;\n    const finish = (ok) => { if (!settled) { settled = true; resolve(buildReply(ok)); } };\n    try {\n        const req = https.request({\n            hostname: takHost,\n            port: takPort,\n            path: '/',\n            method: 'HEAD',\n            timeout: 3000,\n            rejectUnauthorized: false\n        }, (res) => {\n            node.warn('TAK probe OK status ' + res.statusCode);\n            finish(true);\n        });\n        req.on('error', (e) => { node.warn('TAK probe error: ' + e.message); finish(false); });\n        req.on('timeout', () => { node.warn('TAK probe TIMEOUT'); try { req.destroy(); } catch (_) { } finish(false); });\n        req.end();\n    } catch (e) {\n        node.warn('TAK probe threw: ' + e.message);\n        finish(false);\n    }\n});",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -5164,5 +5164,111 @@
                 "90ef32324eb0ad97"
             ]
         ]
+    },
+    {
+        "id": "a7c3e1patch001in",
+        "type": "http in",
+        "z": "a974d10b134f9933",
+        "name": "PATCH /sync/pairs/:id",
+        "url": "/sync/pairs/:id",
+        "method": "patch",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 840,
+        "wires": [
+            [
+                "a7c3e1patch002build"
+            ]
+        ]
+    },
+    {
+        "id": "a7c3e1patch002build",
+        "type": "function",
+        "z": "a974d10b134f9933",
+        "name": "Build PATCH pair",
+        "func": "const id = msg.req && msg.req.params && msg.req.params.id;\nconst body = msg.payload || {};\nif (!id) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { error: 'id required' };\n    return [null, msg];\n}\n\nconst VALID_MODES = new Set(['bidirectional', 'tak_to_caltopo', 'caltopo_to_tak']);\nconst sets = [];\nconst params = [];\nlet idx = 1;\n\nif (body.label !== undefined) {\n    sets.push('label = $' + idx++);\n    params.push(body.label || null);\n}\nif (body.sync_mode !== undefined || body.mode !== undefined) {\n    const rawMode = body.sync_mode || body.mode;\n    if (!VALID_MODES.has(rawMode)) {\n        msg.statusCode = 400;\n        msg.headers = {\n            'Access-Control-Allow-Origin': '*',\n            'Content-Type': 'application/json'\n        };\n        msg.payload = { error: 'invalid sync_mode; use bidirectional, tak_to_caltopo, or caltopo_to_tak' };\n        return [null, msg];\n    }\n    sets.push('sync_mode = $' + idx++);\n    params.push(rawMode);\n}\n\nif (!sets.length) {\n    msg.statusCode = 400;\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Content-Type': 'application/json'\n    };\n    msg.payload = { error: 'no updatable fields (label, sync_mode)' };\n    return [null, msg];\n}\n\nparams.push(id);\nmsg.payload = `\n  UPDATE public.sync_pairs\n     SET ${sets.join(', ')}\n   WHERE id = $${idx}\n  RETURNING id, caltopo_map_id, tak_mission_id, label, sync_mode, last_sync_at, last_result, created_at\n`;\nmsg.queryParameters = params;\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 840,
+        "wires": [
+            [
+                "a7c3e1patch003pg"
+            ],
+            [
+                "a7c3e1patch005err"
+            ]
+        ]
+    },
+    {
+        "id": "a7c3e1patch003pg",
+        "type": "postgres",
+        "z": "a974d10b134f9933",
+        "postgresdb": "0401336095afd0b1",
+        "name": "PATCH pair",
+        "output": true,
+        "perrow": false,
+        "rowspermsg": "1",
+        "return_on_error": true,
+        "limit_queries": "0",
+        "limit_by": "payload",
+        "limit_value": "1",
+        "limit_drop_intermediate": false,
+        "limit_drop_if_in_queue": false,
+        "outputs": 1,
+        "x": 590,
+        "y": 840,
+        "wires": [
+            [
+                "a7c3e1patch004fmt"
+            ]
+        ]
+    },
+    {
+        "id": "a7c3e1patch004fmt",
+        "type": "function",
+        "z": "a974d10b134f9933",
+        "name": "Format PATCH pair",
+        "func": "if (msg.error) {\n    msg.statusCode = 500;\n    msg.payload = { error: String(msg.error.message || msg.error) };\n    msg.headers = {\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n        'Access-Control-Allow-Headers': 'Content-Type',\n        'Content-Type': 'application/json'\n    };\n    return msg;\n}\nconst row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nif (!row) {\n    msg.statusCode = 404;\n    msg.payload = { error: 'pair not found' };\n} else {\n    msg.statusCode = 200;\n    msg.payload = row;\n}\nmsg.headers = {\n    'Access-Control-Allow-Origin': '*',\n    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',\n    'Access-Control-Allow-Headers': 'Content-Type',\n    'Content-Type': 'application/json'\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 840,
+        "wires": [
+            [
+                "a7c3e1patch006reply"
+            ]
+        ]
+    },
+    {
+        "id": "a7c3e1patch005err",
+        "type": "http response",
+        "z": "a974d10b134f9933",
+        "name": "PATCH /sync/pairs/:id error",
+        "statusCode": "",
+        "headers": {},
+        "x": 590,
+        "y": 900,
+        "wires": []
+    },
+    {
+        "id": "a7c3e1patch006reply",
+        "type": "http response",
+        "z": "a974d10b134f9933",
+        "name": "PATCH /sync/pairs/:id reply",
+        "statusCode": "",
+        "headers": {},
+        "x": 1080,
+        "y": 840,
+        "wires": []
     }
 ]

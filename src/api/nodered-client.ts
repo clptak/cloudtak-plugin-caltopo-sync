@@ -2,7 +2,9 @@ import type {
     CreatePairBody,
     HealthCheck,
     Pair,
+    SyncMode,
     SyncResult,
+    UpdatePairBody,
 } from '../types.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 
@@ -67,15 +69,25 @@ export function createPair(body: CreatePairBody): Promise<Pair> {
     return request<Pair>('POST', '/sync/pairs', body);
 }
 
+export function updatePair(id: number, body: UpdatePairBody): Promise<Pair> {
+    return request<Pair>('PATCH', `/sync/pairs/${encodeURIComponent(String(id))}`, body);
+}
+
 export function deletePair(id: number): Promise<void> {
     return request<void>('DELETE', `/sync/pairs/${encodeURIComponent(String(id))}`);
 }
 
-export function runSync(pair: Pair): Promise<SyncResult> {
-    return request<SyncResult>('POST', '/sync/run', {
+export function runSync(pair: Pair, opts?: { force?: boolean; mode?: SyncMode }): Promise<SyncResult> {
+    const body: Record<string, unknown> = {
         caltopo_map_id: pair.caltopo_map_id,
         tak_mission_id: pair.tak_mission_id,
-    });
+        sync_mode: opts?.mode ?? pair.sync_mode ?? 'bidirectional',
+    };
+    // Force full resync: wipes this map's caltopo_maps rows and clears the
+    // per-mission subscription cache before triggering, so a fresh/emptied
+    // mission re-receives every feature. Only sent when explicitly enabled.
+    if (opts?.force) body.force = true;
+    return request<SyncResult>('POST', '/sync/run', body);
 }
 
 // Generic CalTopo proxy. The browser cannot call caltopo.com directly (no CORS

@@ -5,7 +5,7 @@ All endpoints are served by the imported `flow-export.json` Node-RED tab
 
 ```
 Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET,POST,DELETE,OPTIONS
+Access-Control-Allow-Methods: GET,POST,PATCH,DELETE,OPTIONS
 Access-Control-Allow-Headers: Content-Type
 ```
 
@@ -17,7 +17,15 @@ Base URL example: `http://nodered.host:1880`
 
 ## 1. `POST /sync/run`
 
-Trigger a synchronous bidirectional sync for one `(caltopo_map_id, tak_mission_id)` pair.
+Trigger a sync for one `(caltopo_map_id, tak_mission_id)` pair. By default both
+directions run (bidirectional). Pass `sync_mode` to run one direction only
+without propagating deletes on the skipped side.
+
+| `sync_mode` | Behavior |
+|---|---|
+| `bidirectional` (default) | CalTopo ↔ TAK both ways; items removed from CalTopo are removed from the mission |
+| `tak_to_caltopo` | TAK → CalTopo only; CalTopo-only map items are never deleted |
+| `caltopo_to_tak` | CalTopo → TAK only; mission-only items are never deleted |
 
 Internally this fires into the existing fan-out change node
 `a075cdac694b8631`, which drives the legacy Caltopo↔TAK directions. The bridge
@@ -48,7 +56,8 @@ Content-Type: application/json
 
 {
   "caltopo_map_id": "8LH920C",
-  "tak_mission_id": "tak_locate"
+  "tak_mission_id": "tak_locate",
+  "sync_mode": "tak_to_caltopo"
 }
 ```
 
@@ -128,6 +137,7 @@ GET /sync/pairs
     "caltopo_map_id": "8LH920C",
     "tak_mission_id": "tak_locate",
     "label": "Field team Alpha",
+    "sync_mode": "bidirectional",
     "last_sync_at": "2026-05-15T18:42:11.000Z",
     "last_result": { "added": 2, "deleted": 0, "conflicts": 0 },
     "created_at": "2026-05-12T09:00:00.000Z"
@@ -151,7 +161,8 @@ Content-Type: application/json
 {
   "caltopo_map_id": "8LH920C",
   "tak_mission_id": "tak_locate",
-  "label": "Field team Alpha"
+  "label": "Field team Alpha",
+  "sync_mode": "caltopo_to_tak"
 }
 ```
 
@@ -163,6 +174,7 @@ Content-Type: application/json
   "caltopo_map_id": "8LH920C",
   "tak_mission_id": "tak_locate",
   "label": "Field team Alpha",
+  "sync_mode": "caltopo_to_tak",
   "last_sync_at": null,
   "last_result": null,
   "created_at": "2026-05-15T18:30:00.000Z"
@@ -177,7 +189,53 @@ Content-Type: application/json
 
 ---
 
-## 4. `DELETE /sync/pairs/:id`
+## 4. `PATCH /sync/pairs/:id`
+
+Update an existing pair's `label` and/or `sync_mode` without deleting it.
+
+### Request
+
+```http
+PATCH /sync/pairs/3
+Content-Type: application/json
+
+{
+  "sync_mode": "tak_to_caltopo"
+}
+```
+
+Both fields are optional; send at least one.
+
+### Response 200
+
+```json
+{
+  "id": 3,
+  "caltopo_map_id": "8LH920C",
+  "tak_mission_id": "tak_locate",
+  "label": "Field team Alpha",
+  "sync_mode": "tak_to_caltopo",
+  "last_sync_at": "2026-05-15T18:42:11.000Z",
+  "last_result": { "added": 2, "deleted": 0, "conflicts": 0 },
+  "created_at": "2026-05-12T09:00:00.000Z"
+}
+```
+
+### Response 400
+
+```json
+{ "error": "no updatable fields (label, sync_mode)" }
+```
+
+### Response 404
+
+```json
+{ "error": "pair not found" }
+```
+
+---
+
+## 5. `DELETE /sync/pairs/:id`
 
 Remove a sync pair by primary key.
 
@@ -201,7 +259,7 @@ DELETE /sync/pairs/3
 
 ---
 
-## 5. `GET /sync/health`
+## 6. `GET /sync/health`
 
 Synchronous v1 check. Returns four booleans.
 
