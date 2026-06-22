@@ -3,6 +3,8 @@ import { defineAsyncComponent, markRaw } from 'vue';
 import type { PluginAPI, PluginInstance, PluginStatic } from '@tak-ps/cloudtak';
 import SartopoCloudtakIcon from './components/SartopoCloudtakIcon.vue';
 import { useCaltopoSyncStore } from './stores/plugin-state.ts';
+import { configurePliRuntime, stopAllPliShare } from './lib/pli/pli-share-service.ts';
+import { useMapStore } from '../../../src/stores/map.ts';
 
 const MenuCaltopoSync = defineAsyncComponent(
     () => import('./components/MenuCaltopoSync.vue'),
@@ -33,6 +35,11 @@ export default class CaltopoSyncPlugin implements PluginInstance {
         const store = useCaltopoSyncStore(this.api.pinia);
         store.setEnabled(true);
 
+        const mapStore = useMapStore(this.api.pinia);
+        configurePliRuntime({
+            getAtlasWorker: async () => mapStore.worker,
+        });
+
         this.api.menu.add({
             key: MENU_KEY,
             label: 'Caltopo Sync',
@@ -46,6 +53,7 @@ export default class CaltopoSyncPlugin implements PluginInstance {
     async disable(): Promise<void> {
         const store = useCaltopoSyncStore(this.api.pinia);
         store.setEnabled(false);
+        stopAllPliShare();
         this.api.menu.remove(MENU_KEY);
     }
 }

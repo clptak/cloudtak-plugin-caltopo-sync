@@ -60,6 +60,11 @@
             </div>
         </div>
 
+        <PliSettingsPanel
+            v-if='currentUsername'
+            :username='currentUsername'
+        />
+
         <div class='card'>
             <div class='card-header'>
                 <div class='card-title'>
@@ -161,26 +166,31 @@ import ProfileConfig from '../../../../src/base/profile.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
 import { health } from '../api/nodered-client.ts';
 import type { CaltopoSettings } from '../types.ts';
+import PliSettingsPanel from './PliSettingsPanel.vue';
+
+const props = defineProps({
+    embedded: {
+        type: Boolean,
+        default: false,
+    },
+    username: {
+        type: String,
+        default: '',
+    },
+});
 
 const HealthRow = defineComponent({
     props: {
         label: { type: String, required: true },
         ok: { type: Boolean, required: true },
     },
-    setup(props) {
+    setup(healthProps) {
         return () => h('div', { class: 'd-flex align-items-center py-1' }, [
-            props.ok
+            healthProps.ok
                 ? h(IconCircleCheck, { size: 20, stroke: '1', class: 'text-green' })
                 : h(IconCircleX, { size: 20, stroke: '1', class: 'text-red' }),
-            h('div', { class: 'ms-2', textContent: props.label }),
+            h('div', { class: 'ms-2', textContent: healthProps.label }),
         ]);
-    },
-});
-
-defineProps({
-    embedded: {
-        type: Boolean,
-        default: false,
     },
 });
 
@@ -192,7 +202,7 @@ const error = ref<Error | undefined>();
 const caltopo = ref<CaltopoSettings>({ ...store.caltopoSettings });
 const caltopoSaving = ref(false);
 const caltopoSaved = ref(false);
-const currentUsername = ref<string>('');
+const currentUsername = ref<string>(props.username);
 
 watch(() => store.noderedUrl, (v) => {
     if (localUrl.value !== v) localUrl.value = v;
@@ -217,8 +227,11 @@ async function resolveUsername(): Promise<string> {
 }
 
 onMounted(async () => {
-    currentUsername.value = await resolveUsername();
+    if (!currentUsername.value) {
+        currentUsername.value = await resolveUsername();
+    }
     caltopo.value = { ...store.loadCaltopoSettings(currentUsername.value) };
+    store.loadPliSettings(currentUsername.value);
 
     if (store.noderedUrl && !store.lastHealth) {
         try {

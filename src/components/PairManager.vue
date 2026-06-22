@@ -124,6 +124,57 @@
                         placeholder='Friendly name'
                     />
                 </div>
+                <div class='mt-3 border rounded p-3'>
+                    <div class='form-check form-switch'>
+                        <input
+                            id='share-pli-toggle'
+                            v-model='form.share_pli'
+                            class='form-check-input'
+                            type='checkbox'
+                        >
+                        <label
+                            class='form-check-label'
+                            for='share-pli-toggle'
+                        >
+                            Share PLI
+                        </label>
+                    </div>
+                    <div
+                        v-if='form.share_pli'
+                        class='mt-2'
+                    >
+                        <label class='form-label'>Fallback CalTopo Connect Key</label>
+                        <select
+                            v-model='form.pli_connect_key_id'
+                            class='form-select'
+                        >
+                            <option value=''>
+                                Use first configured key
+                            </option>
+                            <option
+                                v-for='key in connectKeyOptions'
+                                :key='key.id'
+                                :value='key.id'
+                            >
+                                {{ key.label || key.connectKey || key.id }}
+                            </option>
+                        </select>
+                        <div class='input-group mt-2'>
+                            <span class='input-group-text'>Every</span>
+                            <input
+                                v-model.number='form.pli_interval_sec'
+                                type='number'
+                                class='form-control'
+                                :min='PLI_MIN_INTERVAL_SEC'
+                                step='1'
+                            >
+                            <span class='input-group-text'>s (CalTopo→TAK poll)</span>
+                        </div>
+                        <small class='text-muted d-block mt-1'>
+                            TAK→CalTopo follows live map PLI. Configure connect keys and regex routing in Settings.
+                        </small>
+                    </div>
+                </div>
                 <TablerAlert
                     v-if='formError'
                     class='mt-3'
@@ -437,6 +488,46 @@
                                             <span class='ms-1'>Stop</span>
                                         </button>
                                     </div>
+                                    <div
+                                        v-if='pair.share_pli'
+                                        v-tooltip='`Share PLI: live TAK→CalTopo + CalTopo App Tracks→TAK every N seconds (min ${PLI_MIN_INTERVAL_SEC}s).`'
+                                        class='input-group input-group-sm'
+                                        style='width: 220px'
+                                    >
+                                        <span class='input-group-text'>PLI</span>
+                                        <input
+                                            type='number'
+                                            class='form-control'
+                                            :min='PLI_MIN_INTERVAL_SEC'
+                                            step='1'
+                                            :value='pliIntervalDraft[pair.id] ?? pair.pli_interval_sec ?? PLI_DEFAULT_INTERVAL_SEC'
+                                            :disabled='store.isPliSharing(pair.id)'
+                                            @input='onPliIntervalInput(pair.id, ($event.target as HTMLInputElement).value)'
+                                        >
+                                        <span class='input-group-text'>s</span>
+                                        <button
+                                            v-if='!store.isPliSharing(pair.id)'
+                                            type='button'
+                                            class='btn btn-success'
+                                            @click='startPli(pair)'
+                                        >
+                                            <IconPlayerPlay
+                                                :size='14'
+                                                stroke='1'
+                                            />
+                                        </button>
+                                        <button
+                                            v-else
+                                            type='button'
+                                            class='btn btn-warning'
+                                            @click='stopPli(pair.id)'
+                                        >
+                                            <IconPlayerStop
+                                                :size='14'
+                                                stroke='1'
+                                            />
+                                        </button>
+                                    </div>
                                     <button
                                         type='button'
                                         class='btn btn-sm btn-outline-danger'
@@ -462,6 +553,16 @@
                                         class='ms-1'
                                         v-text='store.autoSyncInFlight[pair.id] ? "syncing now…" : "auto-sync running"'
                                     />
+                                </div>
+                                <div
+                                    v-if='store.isPliSharing(pair.id)'
+                                    class='text-muted small mt-1'
+                                >
+                                    <IconRefresh
+                                        :size='12'
+                                        stroke='1'
+                                    />
+                                    <span class='ms-1'>PLI sharing active</span>
                                 </div>
                             </td>
                         </tr>
@@ -489,7 +590,10 @@
                 </div>
             </div>
             <div v-show='settingsOpen'>
-                <SettingsPanel embedded />
+                <SettingsPanel
+                    embedded
+                    :username='currentUsername'
+                />
             </div>
         </div>
 
@@ -539,7 +643,9 @@ import {
 } from '../api/nodered-client.ts';
 import { buildCreateMapBody, createCaltopoMap, listCaltopoMaps } from '../api/caltopo-client.ts';
 import { parseCoordinates } from '../lib/coordinates.ts';
-import type { Pair, SyncMode, SyncResult, CaltopoMapOption } from '../types.ts';
+import type { Pair, SyncMode, SyncResult, CaltopoMapOption, ConnectKeyEntry } from '../types.ts';
+import { PLI_DEFAULT_INTERVAL_SEC, PLI_MIN_INTERVAL_SEC } from '../lib/pli/constants.ts';
+import { connectKeyOptions as listConnectKeyOptions } from '../lib/pli/connect-key-routing.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
 import SettingsPanel from './SettingsPanel.vue';
 
@@ -754,11 +860,22 @@ function syncButtonLabel(mode?: SyncMode): string {
     return 'Sync Now';
 }
 
-const form = ref<{ caltopo_map_id: string; tak_mission_id: string; label: string; sync_mode: SyncMode }>({
+const form = ref<{
+    caltopo_map_id: string;
+    tak_mission_id: string;
+    label: string;
+    sync_mode: SyncMode;
+    share_pli: boolean;
+    pli_interval_sec: number;
+    pli_connect_key_id: string;
+}>({
     caltopo_map_id: '',
     tak_mission_id: '',
     label: '',
     sync_mode: 'bidirectional',
+    share_pli: false,
+    pli_interval_sec: PLI_DEFAULT_INTERVAL_SEC,
+    pli_connect_key_id: '',
 });
 const saving = ref(false);
 const formError = ref<Error | undefined>();
@@ -770,8 +887,14 @@ const dialogResult = ref<SyncResult | null>(null);
 
 const AUTO_SYNC_MIN_SECONDS = 30;
 const intervalDraft = ref<Record<number, number>>({});
+const pliIntervalDraft = ref<Record<number, number>>({});
+const currentUsername = ref('');
 // Per-pair "Force full resync" toggle. Never sticky: reset to OFF after each run.
 const forceResync = ref<Record<number, boolean>>({});
+
+const connectKeyOptions = computed<ConnectKeyEntry[]>(() => {
+    return listConnectKeyOptions(store.pliSettings);
+});
 
 function onIntervalInput(pairId: number, raw: string) {
     const n = parseInt(raw, 10);
@@ -795,7 +918,11 @@ const canSubmit = computed(() => {
 });
 
 onMounted(async () => {
+    currentUsername.value = await resolveUsername();
+    store.loadPliSettings(currentUsername.value);
+    store.loadPliRunningPairIds(currentUsername.value);
     await Promise.all([fetchPairs(), fetchMissions(), loadCaltopoMaps()]);
+    restorePliSessions();
 });
 
 function missionName(guid: string): string {
@@ -857,9 +984,24 @@ async function submit() {
             tak_mission_id: form.value.tak_mission_id,
             label: form.value.label.trim() || undefined,
             sync_mode: form.value.sync_mode,
+            share_pli: form.value.share_pli,
+            pli_interval_sec: form.value.share_pli
+                ? Math.max(PLI_MIN_INTERVAL_SEC, form.value.pli_interval_sec || PLI_DEFAULT_INTERVAL_SEC)
+                : undefined,
+            pli_connect_key_id: form.value.share_pli && form.value.pli_connect_key_id
+                ? form.value.pli_connect_key_id
+                : undefined,
         });
         pairs.value = [...(Array.isArray(pairs.value) ? pairs.value : []), created];
-        form.value = { caltopo_map_id: '', tak_mission_id: '', label: '', sync_mode: 'bidirectional' };
+        form.value = {
+            caltopo_map_id: '',
+            tak_mission_id: '',
+            label: '',
+            sync_mode: 'bidirectional',
+            share_pli: false,
+            pli_interval_sec: PLI_DEFAULT_INTERVAL_SEC,
+            pli_connect_key_id: '',
+        };
     } catch (err) {
         formError.value = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -909,11 +1051,48 @@ async function syncNow(pair: Pair) {
     }
 }
 
+function onPliIntervalInput(pairId: number, raw: string) {
+    const n = parseInt(raw, 10);
+    pliIntervalDraft.value = {
+        ...pliIntervalDraft.value,
+        [pairId]: Number.isFinite(n) ? n : PLI_DEFAULT_INTERVAL_SEC,
+    };
+}
+
+function pairWithPliInterval(pair: Pair): Pair {
+    const candidate = pliIntervalDraft.value[pair.id] ?? pair.pli_interval_sec ?? PLI_DEFAULT_INTERVAL_SEC;
+    return {
+        ...pair,
+        pli_interval_sec: Math.max(PLI_MIN_INTERVAL_SEC, Math.floor(candidate) || PLI_DEFAULT_INTERVAL_SEC),
+    };
+}
+
+function restorePliSessions() {
+    const running = store.loadPliRunningPairIds(currentUsername.value);
+    for (const pairId of running) {
+        const pair = pairs.value.find((p) => p.id === pairId);
+        if (pair?.share_pli) {
+            store.startPliForPair(pairWithPliInterval(pair), currentUsername.value);
+        }
+    }
+}
+
+function startPli(pair: Pair) {
+    store.startPliForPair(pairWithPliInterval(pair), currentUsername.value);
+}
+
+function stopPli(pairId: number) {
+    store.stopPliForPair(pairId, currentUsername.value);
+}
+
 async function remove(pair: Pair) {
     if (!confirm(`Delete pair ${pair.label || pair.caltopo_map_id}?`)) return;
     deletingId.value = pair.id;
     try {
         store.stopAutoSync(pair.id);
+        if (store.isPliSharing(pair.id)) {
+            store.stopPliForPair(pair.id, currentUsername.value);
+        }
         await removeMissionLayer(pair);
         await deletePair(pair.id);
         store.clearLastSync(pair.id);

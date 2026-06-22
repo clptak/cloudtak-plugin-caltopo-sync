@@ -1,10 +1,20 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { HealthCheck, SyncResult, Pair, CaltopoSettings } from '../types.ts';
+import type { HealthCheck, SyncResult, Pair, CaltopoSettings, PliSettings } from '../types.ts';
 import { runSync } from '../api/nodered-client.ts';
+import { emptyPliSettings } from '../lib/pli/constants.ts';
+import {
+    isPliSharing,
+    startPliShare,
+    stopAllPliShare,
+    stopPliShare,
+    updatePliShareSettings,
+} from '../lib/pli/pli-share-service.ts';
 
 const STORAGE_KEY = 'caltopo-sync-nodered-url';
 const CALTOPO_SETTINGS_PREFIX = 'caltopo-sync-caltopo-settings';
+const PLI_SETTINGS_PREFIX = 'caltopo-sync-pli-settings';
+const PLI_RUNNING_PREFIX = 'caltopo-sync-pli-running';
 const AUTO_SYNC_MIN_SECONDS = 30;
 
 function readStoredUrl(): string {
@@ -25,6 +35,14 @@ function caltopoSettingsKey(username: string): string {
     return `${CALTOPO_SETTINGS_PREFIX}::${username}`;
 }
 
+function pliSettingsKey(username: string): string {
+    return `${PLI_SETTINGS_PREFIX}::${username}`;
+}
+
+function pliRunningKey(username: string): string {
+    return `${PLI_RUNNING_PREFIX}::${username}`;
+}
+
 export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
     const noderedUrl = ref<string>(readStoredUrl());
     const lastHealth = ref<HealthCheck | null>(null);
@@ -35,6 +53,8 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
     // username the in-memory `caltopoSettings` belongs to.
     const caltopoSettings = ref<CaltopoSettings>(emptyCaltopoSettings());
     const caltopoSettingsUser = ref<string>('');
+    const pliSettings = ref<PliSettings>(emptyPliSettings());
+    const pliRunningPairIds = ref<number[]>([]);
 
     // Per-pair auto-sync: timer + reactive snapshot for the UI.
     // Timer handles live OUTSIDE the reactive ref (Pinia would try to track
@@ -91,6 +111,81 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
         } catch {
             // localStorage may be unavailable (private mode); state is still in memory
         }
+    }
+
+    function loadPliSettings(username: string): PliSettings {
+        try {
+            const raw = localStorage.getItem(pliSettingsKey(username));
+            if (raw) {
+                const parsed = JSON.parse(raw) as Partial<PliSettings>;
+                pliSettings.value = {
+                    ...emptyPliSettings(),
+                    ...parsed,
+                    connectKeys: parsed.connectKeys?.length ? parsed.connectKeys : emptyPliSettings().connectKeys,
+                    regexLookUp: parsed.regexLookUp ?? emptyPliSettings().regexLookUp,
+                    regexRules: parsed.regexRules?.length ? parsed.regexRules : emptyPliSettings().regexRules,
+                    callsignLookup: parsed.callsignLookup?.length ? parsed.callsignLookup : emptyPliSettings().callsignLookup,
+                    addFilterList: parsed.addFilterList ?? [],
+                };
+            } else {
+                pliSettings.value = emptyPliSettings();
+            }
+        } catch {
+            pliSettings.value = emptyPliSettings();
+        }
+        updatePliShareSettings(pliSettings.value);
+        return pliSettings.value;
+    }
+
+    function savePliSettings(username: string, settings: PliSettings): void {
+        pliSettings.value = { ...settings };
+        updatePliShareSettings(pliSettings.value);
+        try {
+            localStorage.setItem(pliSettingsKey(username), JSON.stringify(pliSettings.value));
+        } catch {
+            // ignore
+        }
+    }
+
+    function loadPliRunningPairIds(username: string): number[] {
+        try {
+            const raw = localStorage.getItem(pliRunningKey(username));
+            if (!raw) return [];
+            const parsed = JSON.parse(raw) as unknown;
+            if (!Array.isArray(parsed)) return [];
+            return parsed.filter((n) => typeof n === 'number');
+        } catch {
+            return [];
+        }
+    }
+
+    function persistPliRunningPairIds(username: string, ids: number[]): void {
+        pliRunningPairIds.value = [...ids];
+        try {
+            localStorage.setItem(pliRunningKey(username), JSON.stringify(ids));
+        } catch {
+            // ignore
+        }
+    }
+
+    function startPliForPair(pair: Pair, username: string): void {
+        startPliShare(pair, pliSettings.value);
+        if (!pliRunningPairIds.value.includes(pair.id)) {
+            persistPliRunningPairIds(username, [...pliRunningPairIds.value, pair.id]);
+        }
+    }
+
+    function stopPliForPair(pairId: number, username: string): void {
+        stopPliShare(pairId);
+        persistPliRunningPairIds(
+            username,
+            pliRunningPairIds.value.filter((id) => id !== pairId),
+        );
+    }
+
+    function stopAllPli(username: string): void {
+        stopAllPliShare();
+        persistPliRunningPairIds(username, []);
     }
 
     function setLastSync(pairId: number, result: SyncResult): void {
@@ -151,6 +246,8 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
         enabled,
         caltopoSettings,
         caltopoSettingsUser,
+        pliSettings,
+        pliRunningPairIds,
         autoSyncIntervalByPair,
         autoSyncInFlight,
         autoSyncLastTickAt,
@@ -158,10 +255,18 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
         setLastHealth,
         loadCaltopoSettings,
         saveCaltopoSettings,
+        loadPliSettings,
+        savePliSettings,
+        loadPliRunningPairIds,
+        persistPliRunningPairIds,
+        startPliForPair,
+        stopPliForPair,
+        stopAllPli,
         setLastSync,
         clearLastSync,
         setEnabled,
         isAutoSyncing,
+        isPliSharing,
         startAutoSync,
         stopAutoSync,
     };

@@ -168,3 +168,44 @@ function safeStringify(value: unknown): string {
         return String(value);
     }
 }
+
+export interface ReportPositionInput {
+    connectKey: string;
+    id: string;
+    lat: number;
+    lng: number;
+    baseCaltopoUrl?: string;
+}
+
+export async function reportPosition(input: ReportPositionInput): Promise<void> {
+    await caltopoProxy({
+        forwardType: 'position_report',
+        connectKey: input.connectKey.trim(),
+        id: input.id.trim(),
+        lat: input.lat,
+        lng: input.lng,
+        baseCaltopoUrl: input.baseCaltopoUrl?.trim() || 'https://caltopo.com',
+    });
+}
+
+export interface FetchMapKmlInput {
+    mapId: string;
+    baseCaltopoUrl?: string;
+}
+
+export async function fetchMapKml(input: FetchMapKmlInput): Promise<string> {
+    const parsed = await caltopoProxy<{ raw?: string; text?: string }>({
+        forwardType: 'kml',
+        mapID: input.mapId.trim(),
+        baseCaltopoUrl: input.baseCaltopoUrl?.trim() || 'https://caltopo.com',
+    });
+    const text = typeof parsed?.raw === 'string'
+        ? parsed.raw
+        : typeof parsed?.text === 'string'
+            ? parsed.text
+            : '';
+    if (!text) {
+        throw new Error('CalTopo KML fetch returned empty body');
+    }
+    return text;
+}

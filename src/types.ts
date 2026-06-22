@@ -6,6 +6,9 @@ export interface Pair {
     tak_mission_id: string;
     label?: string;
     sync_mode?: SyncMode;
+    share_pli?: boolean;
+    pli_interval_sec?: number;
+    pli_connect_key_id?: string | null;
     last_sync_at?: string | null;
     last_result?: SyncResult | null;
 }
@@ -45,6 +48,9 @@ export interface NodeRedConfig {
 export interface UpdatePairBody {
     sync_mode?: SyncMode;
     label?: string;
+    share_pli?: boolean;
+    pli_interval_sec?: number;
+    pli_connect_key_id?: string | null;
 }
 
 export interface CreatePairBody {
@@ -52,6 +58,39 @@ export interface CreatePairBody {
     tak_mission_id: string;
     label?: string;
     sync_mode?: SyncMode;
+    share_pli?: boolean;
+    pli_interval_sec?: number;
+    pli_connect_key_id?: string | null;
+}
+
+export interface ConnectKeyEntry {
+    id: string;
+    label: string;
+    connectKey: string;
+}
+
+export interface PliRegexRule {
+    regexKey: string;
+    connectKeyId: string;
+}
+
+export interface CallsignLookupEntry {
+    groupName: string;
+    uidPrefix: string;
+    uidnumber: string;
+    role: string;
+    text: string;
+}
+
+export interface PliSettings {
+    connectKeys: ConnectKeyEntry[];
+    regexLookUp: Record<string, string>;
+    regexRules: PliRegexRule[];
+    callsignLookup: CallsignLookupEntry[];
+    takGroupName: string;
+    addFilter: boolean;
+    addFilterList: string[];
+    baseCaltopoUrl: string;
 }
 
 export interface CaltopoSettings {
