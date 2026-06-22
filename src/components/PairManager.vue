@@ -627,7 +627,7 @@ import {
     IconDownload,
 } from '@tabler/icons-vue';
 import Subscription from '../../../../src/base/subscription.ts';
-import type { Mission, MissionLayerList } from '../../../../src/types.ts';
+import type { Mission } from '../../../../src/types.ts';
 import { std, stdurl } from '../../../../src/std.ts';
 import { useMapStore } from '../../../../src/stores/map.ts';
 import ProfileConfig from '../../../../src/base/profile.ts';
@@ -1120,10 +1120,10 @@ async function ensureMissionLayer(pair: Pair): Promise<void> {
     if (!sub) return;
     const name = `Caltopo: ${pair.caltopo_map_id}`;
     try {
-        const list = await sub.layerList() as MissionLayerList;
-        const existing = list.data.find((l: { name: string; uid: string }) => l.name === name);
+        const layers = await sub.layer.list({ refresh: true });
+        const existing = layers.find((l) => l.name === name);
         if (existing) return;
-        await sub.layerCreate({ name, type: 'UID' });
+        await sub.layer.create({ name, type: 'UID' });
     } catch (err) {
         console.warn('Failed to ensure MissionLayer', err);
     }
@@ -1134,10 +1134,10 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
     if (!sub) return;
     const name = `Caltopo: ${pair.caltopo_map_id}`;
     try {
-        const list = await sub.layerList() as MissionLayerList;
-        const existing = list.data.find((l: { name: string; uid: string }) => l.name === name);
+        const layers = await sub.layer.list({ refresh: true });
+        const existing = layers.find((l) => l.name === name);
         if (!existing) return;
-        await sub.layerDelete(existing.uid);
+        await sub.layer.delete(existing.uid);
     } catch (err) {
         console.warn('Failed to remove MissionLayer', err);
     }
