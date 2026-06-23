@@ -1,8 +1,10 @@
 import { liveQuery } from 'dexie';
+import type { Remote } from 'comlink';
 import { db } from '../../../../../src/database.ts';
 import COT, { OriginMode } from '../../../../../src/base/cot.ts';
 import Subscription from '../../../../../src/base/subscription.ts';
 import type { Feature } from '../../../../../src/types.ts';
+import type Atlas from '../../../../../src/workers/atlas.ts';
 import type { Pair, PliSettings } from '../../types.ts';
 import { reportPosition, fetchMapKml } from '../../api/caltopo-client.ts';
 import { resolveConnectKeyForCallsign } from './connect-key-routing.ts';
@@ -36,12 +38,12 @@ let featureListener: FeatureListener | null = null;
 const lastReported = new Map<string, string>();
 const runningPairs = new Map<number, RunningPairState>();
 let activeSettings: PliSettings | null = null;
-let getWorker: (() => Promise<import('../../../../../src/workers/atlas.ts').default>) | null = null;
+let getWorker: (() => Promise<Remote<Atlas>>) | null = null;
 
 export function configurePliRuntime(opts: {
-    getAtlasWorker: () => Promise<import('../../../../../src/workers/atlas.ts').default>;
+    getAtlasWorker: () => Promise<Remote<Atlas>> | Remote<Atlas>;
 }): void {
-    getWorker = opts.getAtlasWorker;
+    getWorker = async () => await opts.getAtlasWorker();
 }
 
 async function loadVisiblePliFeatures(): Promise<Feature[]> {
@@ -50,10 +52,17 @@ async function loadVisiblePliFeatures(): Promise<Feature[]> {
 
     const connectionFeatures = await db.feature.toArray();
     for (const feat of connectionFeatures) {
-        if (!isPliFeature(feat)) continue;
-        if (seen.has(feat.id)) continue;
-        seen.add(feat.id);
-        out.push(feat);
+        const feature = {
+            id: feat.id,
+            type: 'Feature',
+            path: feat.path,
+            properties: feat.properties,
+            geometry: feat.geometry,
+        } as Feature;
+        if (!isPliFeature(feature)) continue;
+        if (seen.has(feature.id)) continue;
+        seen.add(feature.id);
+        out.push(feature);
     }
 
     const missionFeatures = await db.subscription_feature.toArray();
@@ -177,7 +186,7 @@ async function tickCaltopoToTak(pair: Pair, settings: PliSettings): Promise<void
                 mode: OriginMode.MISSION,
                 mode_id: pair.tak_mission_id,
             }, { skipSave: true });
-            await sub.feature.update(atlas, cot);
+            await sub.feature.update(atlas as unknown as Atlas, cot);
         }
     } catch (err) {
         console.warn(`PLI CalTopo→TAK tick failed for pair ${pair.id}`, err);
