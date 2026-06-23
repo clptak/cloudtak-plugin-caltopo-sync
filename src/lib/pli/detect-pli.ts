@@ -1,4 +1,4 @@
-import type { Feature } from '../../../../src/types.ts';
+import type { Feature } from '../../../../../src/types.ts';
 
 const PLI_TYPE_PREFIX = 'a-f-G-U-C';
 

@@ -1,4 +1,4 @@
-import { db } from '../../../../src/database.ts';
+import { db } from '../../../../../src/database.ts';
 
 export async function isCallsignConnectedOnMap(callsign: string): Promise<boolean> {
     const normalized = callsign.trim();

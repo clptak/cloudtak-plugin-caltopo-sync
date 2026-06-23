@@ -1,8 +1,8 @@
 import { liveQuery } from 'dexie';
-import { db } from '../../../../src/database.ts';
-import COT, { OriginMode } from '../../../../src/base/cot.ts';
-import Subscription from '../../../../src/base/subscription.ts';
-import type { Feature } from '../../../../src/types.ts';
+import { db } from '../../../../../src/database.ts';
+import COT, { OriginMode } from '../../../../../src/base/cot.ts';
+import Subscription from '../../../../../src/base/subscription.ts';
+import type { Feature } from '../../../../../src/types.ts';
 import type { Pair, PliSettings } from '../../types.ts';
 import { reportPosition, fetchMapKml } from '../../api/caltopo-client.ts';
 import { resolveConnectKeyForCallsign } from './connect-key-routing.ts';
@@ -36,10 +36,10 @@ let featureListener: FeatureListener | null = null;
 const lastReported = new Map<string, string>();
 const runningPairs = new Map<number, RunningPairState>();
 let activeSettings: PliSettings | null = null;
-let getWorker: (() => Promise<import('../../../../src/workers/atlas.ts').default>) | null = null;
+let getWorker: (() => Promise<import('../../../../../src/workers/atlas.ts').default>) | null = null;
 
 export function configurePliRuntime(opts: {
-    getAtlasWorker: () => Promise<import('../../../../src/workers/atlas.ts').default>;
+    getAtlasWorker: () => Promise<import('../../../../../src/workers/atlas.ts').default>;
 }): void {
     getWorker = opts.getAtlasWorker;
 }

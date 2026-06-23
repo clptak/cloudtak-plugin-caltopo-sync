@@ -1,4 +1,4 @@
-import type { Feature } from '../../../../src/types.ts';
+import type { Feature } from '../../../../../src/types.ts';
 import type { BuiltPliPayload } from './kml-app-tracks.ts';
 
 export function buildPliFeature(payload: BuiltPliPayload, missionGuid: string): Feature {
