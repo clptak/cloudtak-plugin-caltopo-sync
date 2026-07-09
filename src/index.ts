@@ -1,6 +1,6 @@
 import type { App } from 'vue';
 import { defineAsyncComponent, markRaw } from 'vue';
-import type { PluginAPI, PluginInstance, PluginStatic } from '@tak-ps/cloudtak';
+import type { PluginAPI, PluginInstance, PluginStatic } from '../../../plugin.ts';
 import SartopoCloudtakIcon from './components/SartopoCloudtakIcon.vue';
 import { useCaltopoSyncStore } from './stores/plugin-state.ts';
 import { configurePliRuntime, stopAllPliShare } from './lib/pli/pli-share-service.ts';
@@ -61,4 +61,4 @@ export default class CaltopoSyncPlugin implements PluginInstance {
 type MenuItemIconType = NonNullable<Parameters<PluginAPI['menu']['add']>[0]['icon']>;
 type MenuItemConfig = Parameters<PluginAPI['menu']['add']>[0];
 
-export const _typecheck: PluginStatic = CaltopoSyncPlugin;
+export const _typecheck = CaltopoSyncPlugin as unknown as PluginStatic;
