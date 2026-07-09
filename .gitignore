@@ -12,3 +12,9 @@ coverage/
 *.swp
 *.swo
 caltopo_map_create_body.json
+docs/SESSION_RESUME.md
+docs/vps-update-guide.md
+docs/deployment.md
+docs/operator-smoke-test.md
+docs/phase-2-design.md
+DEPLOYMENT.md
