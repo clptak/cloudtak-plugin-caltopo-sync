@@ -1105,10 +1105,8 @@ async function remove(pair: Pair) {
 }
 
 async function loadSubscription(guid: string): Promise<Subscription | undefined> {
-    const token = localStorage.token;
-    if (!token) return undefined;
     try {
-        return await Subscription.load(guid, { token, reload: false });
+        return await Subscription.load(guid, { reload: false });
     } catch (err) {
         console.warn('Failed to load subscription for layer management', err);
         return undefined;

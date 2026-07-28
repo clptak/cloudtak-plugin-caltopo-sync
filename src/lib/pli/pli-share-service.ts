@@ -169,7 +169,7 @@ async function tickCaltopoToTak(pair: Pair, settings: PliSettings): Promise<void
         if (!getWorker) throw new Error('Atlas worker not configured');
 
         const sub = await Subscription.load(pair.tak_mission_id, {
-            token: localStorage.token ?? '',
+            reload: false,
         });
         if (!sub) throw new Error(`Mission ${pair.tak_mission_id} is not loaded`);
 
