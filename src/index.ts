@@ -1,11 +1,17 @@
 import type { App } from 'vue';
-import { defineAsyncComponent, markRaw } from 'vue';
+import { defineAsyncComponent, defineComponent, h, markRaw, onMounted } from 'vue';
 import type { PluginAPI, PluginInstance, PluginStatic } from '../../../plugin.ts';
+import { useAppStore } from '../../../src/stores/app.ts';
 import SartopoCloudtakIcon from './components/SartopoCloudtakIcon.vue';
 import { useCaltopoSyncStore } from './stores/plugin-state.ts';
 import { configurePliRuntime, stopAllPliShare } from './lib/pli/pli-share-service.ts';
 import { useMapStore } from '../../../src/stores/map.ts';
+import { bindFloatPane, cleanupFloatPane, openDesktopPane } from './lib/floatPane.ts';
+import { bindPopout, closePopout } from './lib/popout.ts';
 
+const CaltopoSyncFloatShell = defineAsyncComponent(
+    () => import('./components/CaltopoSyncFloatShell.vue'),
+);
 const MenuCaltopoSync = defineAsyncComponent(
     () => import('./components/MenuCaltopoSync.vue'),
 );
@@ -22,25 +28,49 @@ export default class CaltopoSyncPlugin implements PluginInstance {
     }
 
     static async install(_app: App, api: PluginAPI): Promise<PluginInstance> {
-        api.routes.add({
-            path: ROUTE_PATH,
-            name: ROUTE_NAME,
-            component: MenuCaltopoSync,
-        }, 'home-menu');
-
         return new CaltopoSyncPlugin(api);
     }
 
     async enable(): Promise<void> {
-        const store = useCaltopoSyncStore(this.api.pinia);
+        const api = this.api;
+        const store = useCaltopoSyncStore(api.pinia);
         store.setEnabled(true);
 
-        const mapStore = useMapStore(this.api.pinia);
+        const mapStore = useMapStore(api.pinia);
         configurePliRuntime({
             getAtlasWorker: async () => mapStore.worker,
         });
 
-        this.api.menu.add({
+        bindPopout(api);
+        bindFloatPane({
+            api,
+            shell: CaltopoSyncFloatShell as unknown as HostFloatComponent,
+        });
+
+        api.routes.add({
+            path: ROUTE_PATH,
+            name: ROUTE_NAME,
+            component: defineComponent({
+                name: 'CaltopoSyncEntry',
+                setup() {
+                    const appStore = useAppStore(api.pinia);
+                    onMounted(() => {
+                        if (!appStore.isMobileDetected) {
+                            openDesktopPane();
+                            void api.router.replace({ name: 'home' });
+                        }
+                    });
+                    return () => {
+                        if (appStore.isMobileDetected) {
+                            return h(MenuCaltopoSync);
+                        }
+                        return null;
+                    };
+                },
+            }),
+        }, 'home-menu');
+
+        api.menu.add({
             key: MENU_KEY,
             label: 'Caltopo Sync',
             route: ROUTE_NAME,
@@ -54,11 +84,17 @@ export default class CaltopoSyncPlugin implements PluginInstance {
         const store = useCaltopoSyncStore(this.api.pinia);
         store.setEnabled(false);
         stopAllPliShare();
+        closePopout();
+        cleanupFloatPane();
         this.api.menu.remove(MENU_KEY);
+        if (this.api.router.hasRoute(ROUTE_NAME)) {
+            this.api.router.removeRoute(ROUTE_NAME);
+        }
     }
 }
 
 type MenuItemIconType = NonNullable<Parameters<PluginAPI['menu']['add']>[0]['icon']>;
 type MenuItemConfig = Parameters<PluginAPI['menu']['add']>[0];
+type HostFloatComponent = Parameters<PluginAPI['float']['add']>[0]['component'];
 
 export const _typecheck = CaltopoSyncPlugin as unknown as PluginStatic;

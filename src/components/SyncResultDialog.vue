@@ -1,122 +1,136 @@
 <template>
-    <TablerModal
-        size='md'
-        @close='$emit("close")'
+    <!--
+      In-place modal (no Teleport) so the dialog works inside the popout
+      document. TablerModal teleports to the main window body.
+    -->
+    <div
+        class='modal modal-blur show d-block'
+        tabindex='-1'
+        role='dialog'
+        aria-modal='true'
+        @click.self='$emit("close")'
     >
-        <div class='modal-status bg-blue' />
-        <div class='modal-header'>
-            <div class='modal-title'>
-                Sync Result
-            </div>
-        </div>
-        <div class='modal-body'>
-            <div class='row g-3'>
-                <div class='col-6 col-md-3'>
-                    <div class='subheader'>
-                        Added
+        <div
+            class='modal-dialog modal-dialog-centered modal-md'
+            role='document'
+        >
+            <div class='modal-content'>
+                <div class='modal-status bg-blue' />
+                <div class='modal-header'>
+                    <div class='modal-title'>
+                        Sync Result
                     </div>
-                    <div
-                        class='h2'
-                        v-text='result.added'
-                    />
                 </div>
-                <div class='col-6 col-md-3'>
-                    <div class='subheader'>
-                        Updated
+                <div class='modal-body'>
+                    <div class='row g-3'>
+                        <div class='col-6 col-md-3'>
+                            <div class='subheader'>
+                                Added
+                            </div>
+                            <div
+                                class='h2'
+                                v-text='result.added'
+                            />
+                        </div>
+                        <div class='col-6 col-md-3'>
+                            <div class='subheader'>
+                                Updated
+                            </div>
+                            <div
+                                class='h2'
+                                v-text='result.updated'
+                            />
+                        </div>
+                        <div class='col-6 col-md-3'>
+                            <div class='subheader'>
+                                Deleted
+                            </div>
+                            <div
+                                class='h2'
+                                v-text='result.deleted'
+                            />
+                        </div>
+                        <div class='col-6 col-md-3'>
+                            <div class='subheader'>
+                                Conflicts
+                            </div>
+                            <div
+                                class='h2'
+                                :class='result.conflicts > 0 ? "text-warning" : ""'
+                                v-text='result.conflicts'
+                            />
+                        </div>
                     </div>
-                    <div
-                        class='h2'
-                        v-text='result.updated'
-                    />
-                </div>
-                <div class='col-6 col-md-3'>
-                    <div class='subheader'>
-                        Deleted
-                    </div>
-                    <div
-                        class='h2'
-                        v-text='result.deleted'
-                    />
-                </div>
-                <div class='col-6 col-md-3'>
-                    <div class='subheader'>
-                        Conflicts
-                    </div>
-                    <div
-                        class='h2'
-                        :class='result.conflicts > 0 ? "text-warning" : ""'
-                        v-text='result.conflicts'
-                    />
-                </div>
-            </div>
-            <div class='mt-3 d-flex align-items-center'>
-                <IconClock
-                    :size='20'
-                    stroke='1'
-                />
-                <div
-                    class='ms-2'
-                    v-text='`Completed in ${result.duration_ms} ms`'
-                />
-            </div>
-            <div
-                v-if='result._signal?.caltopo_synthetic || result._signal?.tak_synthetic'
-                class='mt-3 alert alert-warning mb-0'
-            >
-                <div class='d-flex align-items-center'>
-                    <IconInfoCircle
-                        :size='18'
-                        stroke='1'
-                    />
-                    <span class='ms-2'>
-                        Best-effort completion: no terminal signal received from
-                        <span v-if='result._signal?.caltopo_synthetic'>Caltopo</span>
-                        <span v-if='result._signal?.caltopo_synthetic && result._signal?.tak_synthetic'> and </span>
-                        <span v-if='result._signal?.tak_synthetic'>TAK</span>
-                        direction (likely empty side). Counts are derived rather than transactional.
-                    </span>
-                </div>
-            </div>
-            <div
-                v-if='displayErrors.length'
-                class='mt-3'
-            >
-                <div class='subheader mb-2'>
-                    Errors
-                </div>
-                <ul class='list-unstyled mb-0'>
-                    <li
-                        v-for='(err, idx) in displayErrors'
-                        :key='idx'
-                        class='text-danger'
-                    >
-                        <IconAlertTriangle
-                            :size='16'
+                    <div class='mt-3 d-flex align-items-center'>
+                        <IconClock
+                            :size='20'
                             stroke='1'
                         />
-                        <span
+                        <div
                             class='ms-2'
-                            v-text='err'
+                            v-text='`Completed in ${result.duration_ms} ms`'
                         />
-                    </li>
-                </ul>
+                    </div>
+                    <div
+                        v-if='result._signal?.caltopo_synthetic || result._signal?.tak_synthetic'
+                        class='mt-3 alert alert-warning mb-0'
+                    >
+                        <div class='d-flex align-items-center'>
+                            <IconInfoCircle
+                                :size='18'
+                                stroke='1'
+                            />
+                            <span class='ms-2'>
+                                Best-effort completion: no terminal signal received from
+                                <span v-if='result._signal?.caltopo_synthetic'>Caltopo</span>
+                                <span v-if='result._signal?.caltopo_synthetic && result._signal?.tak_synthetic'> and </span>
+                                <span v-if='result._signal?.tak_synthetic'>TAK</span>
+                                direction (likely empty side). Counts are derived rather than transactional.
+                            </span>
+                        </div>
+                    </div>
+                    <div
+                        v-if='displayErrors.length'
+                        class='mt-3'
+                    >
+                        <div class='subheader mb-2'>
+                            Errors
+                        </div>
+                        <ul class='list-unstyled mb-0'>
+                            <li
+                                v-for='(err, idx) in displayErrors'
+                                :key='idx'
+                                class='text-danger'
+                            >
+                                <IconAlertTriangle
+                                    :size='16'
+                                    stroke='1'
+                                />
+                                <span
+                                    class='ms-2'
+                                    v-text='err'
+                                />
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class='modal-footer'>
+                    <button
+                        type='button'
+                        class='btn btn-primary ms-auto'
+                        @click='$emit("close")'
+                    >
+                        Close
+                    </button>
+                </div>
             </div>
         </div>
-        <div class='modal-footer'>
-            <button
-                type='button'
-                class='btn btn-primary ms-auto'
-                @click='$emit("close")'
-            >
-                Close
-            </button>
-        </div>
-    </TablerModal>
+    </div>
+    <div class='modal-backdrop fade show' />
 </template>
 
 <script setup lang='ts'>
 import { computed } from 'vue';
-import { TablerModal } from '@tak-ps/vue-tabler';
 import { IconClock, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-vue';
 import type { PropType } from 'vue';
 import type { SyncResult } from '../types.ts';
