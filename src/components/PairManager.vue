@@ -1,5 +1,18 @@
 <template>
     <div class='col-12 py-3 caltopo-sync-panel'>
+        <div class='d-flex align-items-center gap-2 mb-3'>
+            <TablerIconButton
+                class='ms-auto'
+                title='Settings'
+                @click='settingsOpen = true'
+            >
+                <IconSettings
+                    :size='22'
+                    stroke='1.5'
+                />
+            </TablerIconButton>
+        </div>
+
         <div class='card'>
             <div class='card-header'>
                 <div class='card-title'>
@@ -7,6 +20,13 @@
                 </div>
             </div>
             <div class='card-body'>
+                <TablerInlineAlert
+                    v-if='caltopoCredsIncomplete'
+                    class='mb-3'
+                    severity='info'
+                    title='Caltopo credentials missing'
+                    description='Add your Caltopo credentials under Settings (gear icon).'
+                />
                 <TablerInlineAlert
                     class='mb-3'
                     severity='warning'
@@ -571,31 +591,43 @@
             </div>
         </div>
 
-        <div class='card mt-3'>
+        <!-- Settings modal (no Teleport — works inside popout window) -->
+        <div
+            v-if='settingsOpen'
+            class='modal modal-blur show d-block'
+            tabindex='-1'
+            role='dialog'
+            @click.self='settingsOpen = false'
+        >
             <div
-                class='card-header cursor-pointer d-flex align-items-center'
-                role='button'
-                @click='settingsOpen = !settingsOpen'
+                class='modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable'
+                role='document'
             >
-                <div class='card-title'>
-                    Settings
+                <div class='modal-content'>
+                    <div class='modal-header'>
+                        <h5 class='modal-title'>
+                            Settings
+                        </h5>
+                        <button
+                            type='button'
+                            class='btn-close'
+                            aria-label='Close'
+                            @click='settingsOpen = false'
+                        />
+                    </div>
+                    <div class='modal-body'>
+                        <SettingsPanel
+                            embedded
+                            :username='currentUsername'
+                        />
+                    </div>
                 </div>
-                <div class='ms-auto'>
-                    <IconChevronDown
-                        :size='20'
-                        stroke='1'
-                        class='create-map-chevron'
-                        :class='{ "create-map-chevron-open": settingsOpen }'
-                    />
-                </div>
-            </div>
-            <div v-show='settingsOpen'>
-                <SettingsPanel
-                    embedded
-                    :username='currentUsername'
-                />
             </div>
         </div>
+        <div
+            v-if='settingsOpen'
+            class='modal-backdrop fade show'
+        />
 
         <SyncResultDialog
             v-if='dialogResult'
@@ -614,6 +646,7 @@ import {
     TablerNone,
     TablerRefreshButton,
     TablerInlineAlert,
+    TablerIconButton,
 } from '@tak-ps/vue-tabler';
 import {
     IconPlus,
@@ -625,6 +658,7 @@ import {
     IconAmbulance,
     IconMap,
     IconDownload,
+    IconSettings,
 } from '@tabler/icons-vue';
 import Subscription from '../../../../src/base/subscription.ts';
 import type { Mission } from '../../../../src/types.ts';
@@ -749,7 +783,7 @@ async function createCaltopoMapHandler() {
     const username = await resolveUsername();
     const creds = store.loadCaltopoSettings(username);
     if (!creds.credentialId.trim() || !creds.credentialKey.trim() || !creds.accountId.trim()) {
-        createMapError.value = new Error('Caltopo credentials are incomplete. Fill them in the Settings tab.');
+        createMapError.value = new Error('Caltopo credentials are incomplete. Fill them in Settings (gear icon).');
         return;
     }
 
@@ -917,8 +951,16 @@ const canSubmit = computed(() => {
     return form.value.caltopo_map_id.trim() !== '' && form.value.tak_mission_id !== '';
 });
 
+const caltopoCredsIncomplete = computed(() => {
+    const creds = store.caltopoSettings;
+    return !creds.credentialId.trim()
+        || !creds.credentialKey.trim()
+        || !creds.accountId.trim();
+});
+
 onMounted(async () => {
     currentUsername.value = await resolveUsername();
+    store.loadCaltopoSettings(currentUsername.value);
     store.loadPliSettings(currentUsername.value);
     store.loadPliRunningPairIds(currentUsername.value);
     await Promise.all([fetchPairs(), fetchMissions(), loadCaltopoMaps()]);
