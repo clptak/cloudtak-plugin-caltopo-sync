@@ -97,10 +97,17 @@ export function openDesktopPane(): void {
 
 export function minimizeDesktopPane(): void {
     const pluginApi = requireApi();
-    if (!pluginApi.float.has(PANE_UID) || minimized) return;
+    // Prefer the float store directly (same path as showFloat) so remove is
+    // consistent even if the PluginAPI float proxy was created against a
+    // different store timing.
+    const floatStore = useFloatStore(pluginApi.pinia);
+    if (!floatStore.panes.has(PANE_UID) || minimized) {
+        minimized = true;
+        return;
+    }
 
     savedGeometry = readGeometry();
-    pluginApi.float.remove(PANE_UID);
+    floatStore.delete(PANE_UID);
     minimized = true;
 }
 

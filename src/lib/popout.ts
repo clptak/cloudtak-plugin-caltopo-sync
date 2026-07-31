@@ -22,6 +22,13 @@ let styleObserver: MutationObserver | null = null;
 /** Source node in the main document head -> its clone in the popout head. */
 let styleClones = new Map<Node, Node>();
 let mainUnloadHandler: (() => void) | null = null;
+let closedPoll: ReturnType<typeof setInterval> | null = null;
+/**
+ * True only after the popout Vue app has mounted successfully.
+ * Close handlers ignore teardown until then so document.write / early pagehide
+ * races cannot clear state or restore the float during open.
+ */
+let popoutReady = false;
 /** When true, skip restoring the float after popout teardown (disable / main unload). */
 let suppressFloatRestore = false;
 
@@ -30,11 +37,11 @@ export function bindPopout(pluginApi: PluginAPI): void {
 }
 
 export function isPopoutOpen(): boolean {
-    return Boolean(popoutWindow && !popoutWindow.closed);
+    return Boolean(popoutWindow && !popoutWindow.closed && popoutReady);
 }
 
 export function focusPopout(): void {
-    if (isPopoutOpen()) popoutWindow!.focus();
+    if (popoutWindow && !popoutWindow.closed) popoutWindow.focus();
 }
 
 export function closePopout(): void {
@@ -64,28 +71,60 @@ export async function openPopout(): Promise<boolean> {
     suppressFloatRestore = true;
     cleanup();
     suppressFloatRestore = false;
+    popoutReady = false;
     popoutWindow = win;
 
     writeSkeleton(win);
     copyStyles(win);
     watchStyles(win);
 
-    win.addEventListener('pagehide', onPopoutClosed);
-    mainUnloadHandler = () => closePopout();
-    window.addEventListener('pagehide', mainUnloadHandler);
+    // Hide the in-map float as soon as the child window exists — before any
+    // further awaits — so the map pane does not linger if mount is slow.
+    const { minimizeDesktopPane, openDesktopPane } = await import('./floatPane.ts');
+    minimizeDesktopPane();
 
-    const { default: PopoutRoot } = await import('../components/popout/PopoutRoot.vue');
-    if (popoutWindow !== win || win.closed) return false;
+    try {
+        const { default: PopoutRoot } = await import('../components/popout/PopoutRoot.vue');
+        if (win.closed) {
+            cleanup();
+            openDesktopPane();
+            return false;
+        }
 
-    const root = win.document.getElementById(POPOUT_ROOT_ID);
-    if (!root) return false;
+        // Re-assert in case a spurious teardown cleared the ref during import.
+        popoutWindow = win;
 
-    const app = createApp(PopoutRoot);
-    app.use(api.pinia);
-    app.mount(root);
-    popoutApp = app;
-    win.focus();
-    return true;
+        const root = win.document.getElementById(POPOUT_ROOT_ID);
+        if (!root) {
+            cleanup();
+            if (!win.closed) win.close();
+            openDesktopPane();
+            return false;
+        }
+
+        const app = createApp(PopoutRoot);
+        app.use(api.pinia);
+        app.mount(root);
+        popoutApp = app;
+        popoutReady = true;
+
+        // Attach close listeners only after a successful mount. document.write
+        // can emit pagehide around skeleton creation; listening earlier raced
+        // with open and restored the float (or aborted mount).
+        win.addEventListener('pagehide', onPopoutClosed);
+        startClosedPoll(win);
+
+        mainUnloadHandler = () => closePopout();
+        window.addEventListener('pagehide', mainUnloadHandler);
+
+        win.focus();
+        return true;
+    } catch {
+        cleanup();
+        if (!win.closed) win.close();
+        openDesktopPane();
+        return false;
+    }
 }
 
 function writeSkeleton(win: Window): void {
@@ -153,7 +192,7 @@ function copyStyles(win: Window): void {
  */
 function watchStyles(win: Window): void {
     styleObserver = new MutationObserver((mutations) => {
-        if (!isPopoutOpen()) return;
+        if (!popoutWindow || popoutWindow.closed) return;
         for (const mutation of mutations) {
             if (mutation.type === 'characterData') {
                 const owner = mutation.target.parentElement;
@@ -173,8 +212,29 @@ function watchStyles(win: Window): void {
     });
 }
 
+function startClosedPoll(win: Window): void {
+    stopClosedPoll();
+    closedPoll = setInterval(() => {
+        if (win.closed) {
+            stopClosedPoll();
+            onPopoutClosed();
+        }
+    }, 400);
+}
+
+function stopClosedPoll(): void {
+    if (closedPoll) {
+        clearInterval(closedPoll);
+        closedPoll = null;
+    }
+}
+
 function onPopoutClosed(): void {
-    const shouldRestore = !suppressFloatRestore;
+    // Ignore teardown until mount completed (spurious pagehide during open).
+    if (!popoutReady && !suppressFloatRestore) return;
+
+    const shouldRestore = !suppressFloatRestore && popoutReady;
+    popoutReady = false;
     cleanup();
     if (shouldRestore) {
         // Lazy import avoids a circular dependency with floatPane.ts.
@@ -185,6 +245,8 @@ function onPopoutClosed(): void {
 }
 
 function cleanup(): void {
+    stopClosedPoll();
+    popoutReady = false;
     if (styleObserver) {
         styleObserver.disconnect();
         styleObserver = null;

@@ -17,9 +17,8 @@ import { openPopout } from '../lib/popout.ts';
 import { minimizeDesktopPane } from '../lib/floatPane.ts';
 
 async function popOut(): Promise<void> {
-    // Video-wall "push" pattern: hide the float over the map (saving its
-    // geometry for later restore) and hand the UI off to the popout window.
-    // Keep the float if the popup was blocked.
+    // openPopout hides the in-map float as soon as the child window opens.
+    // Keep this minimize call as a safety net if the pane was re-shown.
     const opened = await openPopout();
     if (opened) minimizeDesktopPane();
 }
