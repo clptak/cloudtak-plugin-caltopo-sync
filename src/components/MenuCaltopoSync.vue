@@ -1,12 +1,10 @@
 <template>
     <MenuTemplate name='Caltopo Sync'>
-        <template #title>
+        <template #header>
             <SartopoCloudtakFavicon :size='28' />
             <span class='strong user-select-none'>Caltopo Sync</span>
         </template>
-        <template #default>
-            <PairManager />
-        </template>
+        <PairManager />
     </MenuTemplate>
 </template>
 
