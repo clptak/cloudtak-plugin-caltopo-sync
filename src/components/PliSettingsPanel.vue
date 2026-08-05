@@ -1,131 +1,57 @@
 <template>
-    <div class='card mb-3'>
-        <div class='card-header'>
-            <div class='card-title'>
+    <TablerBorder
+        class='cloudtak-accent text-white mb-3'
+        :fill-height='false'
+        :shadow='false'
+        gap='sm'
+    >
+        <template #label>
+            <p class='text-uppercase text-white-50 small mb-0'>
                 Share PLI Configuration
-            </div>
-        </div>
-        <div class='card-body'>
-            <p class='text-muted small'>
-                TAK PLI is read from everything visible on the CloudTAK map. CalTopo connect keys
-                and regex rules decide which map receives each position report.
             </p>
+        </template>
 
-            <div class='mb-3'>
-                <label class='form-label'>CalTopo Base URL</label>
-                <TablerInput
-                    v-model='local.baseCaltopoUrl'
-                    placeholder='https://caltopo.com'
-                />
-            </div>
+        <p class='text-muted small mb-0'>
+            TAK PLI is read from everything visible on the CloudTAK map. CalTopo connect keys
+            and regex rules decide which map receives each position report.
+        </p>
 
-            <div class='operational-hazard-section border rounded p-3 mb-3'>
-                <div class='operational-hazard-section-title mb-2'>
-                    CalTopo Connect Keys
-                </div>
-                <div
-                    v-for='(entry, index) in local.connectKeys'
-                    :key='entry.id'
-                    class='border rounded p-2 mb-2'
-                >
-                    <div class='row g-2'>
-                        <div class='col-md-4'>
-                            <TablerInput
-                                v-model='entry.label'
-                                :label='`Label ${index + 1}`'
-                                placeholder='e.g. Sworn'
-                            />
-                        </div>
-                        <div class='col-md-7'>
-                            <TablerInput
-                                v-model='entry.connectKey'
-                                label='Connect Key'
-                                placeholder='tak_...'
-                            />
-                        </div>
-                        <div class='col-md-1 d-flex align-items-end'>
-                            <button
-                                type='button'
-                                class='btn btn-outline-danger w-100'
-                                :disabled='local.connectKeys.length <= 1'
-                                @click='removeConnectKey(entry.id)'
-                            >
-                                <IconX
-                                    :size='16'
-                                    stroke='1'
-                                />
-                            </button>
-                        </div>
+        <TablerInput
+            v-model='local.baseCaltopoUrl'
+            label='CalTopo Base URL'
+            placeholder='https://caltopo.com'
+        />
+
+        <div class='cloudtak-accent border rounded-3 text-white px-2 py-2'>
+            <p class='text-uppercase text-white-50 small mb-2'>
+                CalTopo Connect Keys
+            </p>
+            <div
+                v-for='(entry, index) in local.connectKeys'
+                :key='entry.id'
+                class='cloudtak-accent border rounded-3 text-white px-2 py-2 mb-2'
+            >
+                <div class='row g-2'>
+                    <div class='col-md-4'>
+                        <TablerInput
+                            v-model='entry.label'
+                            :label='`Label ${index + 1}`'
+                            placeholder='e.g. Sworn'
+                        />
                     </div>
-                </div>
-                <button
-                    type='button'
-                    class='btn btn-sm btn-outline-primary'
-                    :disabled='local.connectKeys.length >= MAX_CONNECT_KEYS'
-                    @click='addConnectKeyRow'
-                >
-                    <IconPlus
-                        :size='16'
-                        stroke='1'
-                    />
-                    <span class='ms-1'>Add Connect Key</span>
-                </button>
-            </div>
-
-            <div class='mb-3'>
-                <label class='form-label'>Regex Lookup (JSON)</label>
-                <textarea
-                    v-model='regexLookUpText'
-                    class='form-control font-monospace'
-                    rows='6'
-                />
-                <small class='text-muted'>Maps regex names to pattern strings used by routing rules.</small>
-            </div>
-
-            <div class='operational-hazard-section border rounded p-3 mb-3'>
-                <div class='operational-hazard-section-title mb-2'>
-                    Connect Key Routing Rules
-                </div>
-                <div
-                    v-for='(rule, index) in local.regexRules'
-                    :key='`${rule.regexKey}-${rule.connectKeyId}-${index}`'
-                    class='row g-2 mb-2'
-                >
-                    <div class='col-md-5'>
-                        <label class='form-label'>Regex name</label>
-                        <select
-                            v-model='rule.regexKey'
-                            class='form-select'
-                        >
-                            <option
-                                v-for='key in regexKeyOptions'
-                                :key='key'
-                                :value='key'
-                            >
-                                {{ key }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class='col-md-6'>
-                        <label class='form-label'>Connect key</label>
-                        <select
-                            v-model='rule.connectKeyId'
-                            class='form-select'
-                        >
-                            <option
-                                v-for='key in local.connectKeys'
-                                :key='key.id'
-                                :value='key.id'
-                            >
-                                {{ key.label || key.connectKey || key.id }}
-                            </option>
-                        </select>
+                    <div class='col-md-7'>
+                        <TablerInput
+                            v-model='entry.connectKey'
+                            label='Connect Key'
+                            placeholder='tak_...'
+                        />
                     </div>
                     <div class='col-md-1 d-flex align-items-end'>
                         <button
                             type='button'
                             class='btn btn-outline-danger w-100'
-                            @click='removeRegexRule(index)'
+                            :disabled='local.connectKeys.length <= 1'
+                            @click='removeConnectKey(entry.id)'
                         >
                             <IconX
                                 :size='16'
@@ -134,96 +60,137 @@
                         </button>
                     </div>
                 </div>
-                <button
-                    type='button'
-                    class='btn btn-sm btn-outline-primary'
-                    @click='addRegexRuleRow'
-                >
-                    <IconPlus
-                        :size='16'
-                        stroke='1'
-                    />
-                    <span class='ms-1'>Add Rule</span>
-                </button>
             </div>
-
-            <div class='mb-3'>
-                <label class='form-label'>Callsign Lookup (JSON)</label>
-                <textarea
-                    v-model='callsignLookupText'
-                    class='form-control font-monospace'
-                    rows='8'
+            <button
+                type='button'
+                class='btn btn-sm btn-outline-primary'
+                :disabled='local.connectKeys.length >= MAX_CONNECT_KEYS'
+                @click='addConnectKeyRow'
+            >
+                <IconPlus
+                    :size='16'
+                    stroke='1'
                 />
-            </div>
-
-            <div class='mb-3'>
-                <label class='form-label'>Default TAK Team</label>
-                <select
-                    v-model='local.takGroupName'
-                    class='form-select'
-                >
-                    <option
-                        v-for='team in TAK_GROUP_OPTIONS'
-                        :key='team'
-                        :value='team'
-                    >
-                        {{ team }}
-                    </option>
-                </select>
-            </div>
-
-            <div class='form-check mb-2'>
-                <input
-                    id='pli-add-filter'
-                    v-model='local.addFilter'
-                    class='form-check-input'
-                    type='checkbox'
-                >
-                <label
-                    class='form-check-label'
-                    for='pli-add-filter'
-                >
-                    Enable additional CalTopo→TAK name filters
-                </label>
-            </div>
-            <NumberedTextList
-                v-if='local.addFilter'
-                v-model='local.addFilterList'
-                :max='MAX_FILTER_TERMS'
-                item-label='Filter term'
-                max-hint='Maximum of 20 filter terms.'
-            />
-
-            <div class='d-flex align-items-center mt-3'>
-                <button
-                    type='button'
-                    class='btn btn-primary'
-                    :disabled='pliSaving'
-                    @click='savePli'
-                >
-                    <IconDeviceFloppy
-                        :size='18'
-                        stroke='1'
-                    />
-                    <span class='ms-2'>Save PLI Settings</span>
-                </button>
-                <span
-                    v-if='pliSaved'
-                    class='ms-3 text-green'
-                >Saved</span>
-            </div>
-            <TablerAlert
-                v-if='pliError'
-                class='mt-3'
-                :err='pliError'
-            />
+                <span class='ms-1'>Add Connect Key</span>
+            </button>
         </div>
-    </div>
+
+        <TablerInput
+            v-model='regexLookUpText'
+            label='Regex Lookup (JSON)'
+            description='Maps regex names to pattern strings used by routing rules.'
+            :rows='6'
+        />
+
+        <div class='cloudtak-accent border rounded-3 text-white px-2 py-2'>
+            <p class='text-uppercase text-white-50 small mb-2'>
+                Connect Key Routing Rules
+            </p>
+            <div
+                v-for='(rule, index) in local.regexRules'
+                :key='`${rule.regexKey}-${rule.connectKeyId}-${index}`'
+                class='row g-2 mb-2'
+            >
+                <div class='col-md-5'>
+                    <TablerEnum
+                        v-model='rule.regexKey'
+                        label='Regex Name'
+                        :options='regexKeyOptions'
+                    />
+                </div>
+                <div class='col-md-6'>
+                    <TablerEnum
+                        :model-value='connectKeyLabelForRule(rule.connectKeyId)'
+                        label='Connect Key'
+                        :options='connectKeyLabels'
+                        @update:model-value='setRuleConnectKey(index, $event)'
+                    />
+                </div>
+                <div class='col-md-1 d-flex align-items-end'>
+                    <button
+                        type='button'
+                        class='btn btn-outline-danger w-100'
+                        @click='removeRegexRule(index)'
+                    >
+                        <IconX
+                            :size='16'
+                            stroke='1'
+                        />
+                    </button>
+                </div>
+            </div>
+            <button
+                type='button'
+                class='btn btn-sm btn-outline-primary'
+                @click='addRegexRuleRow'
+            >
+                <IconPlus
+                    :size='16'
+                    stroke='1'
+                />
+                <span class='ms-1'>Add Rule</span>
+            </button>
+        </div>
+
+        <TablerInput
+            v-model='callsignLookupText'
+            label='Callsign Lookup (JSON)'
+            :rows='8'
+        />
+
+        <TablerEnum
+            v-model='local.takGroupName'
+            label='Default TAK Team'
+            :options='[...TAK_GROUP_OPTIONS]'
+        />
+
+        <TablerToggle
+            v-model='local.addFilter'
+            label='Enable Additional CalTopo→TAK Name Filters'
+        />
+        <NumberedTextList
+            v-if='local.addFilter'
+            v-model='local.addFilterList'
+            :max='MAX_FILTER_TERMS'
+            item-label='Filter term'
+            max-hint='Maximum of 20 filter terms.'
+        />
+
+        <div class='d-flex align-items-center mt-2'>
+            <button
+                type='button'
+                class='btn btn-primary'
+                :disabled='pliSaving'
+                @click='savePli'
+            >
+                <IconDeviceFloppy
+                    :size='18'
+                    stroke='1'
+                />
+                <span class='ms-2'>Save PLI Settings</span>
+            </button>
+            <span
+                v-if='pliSaved'
+                class='ms-3 text-green'
+            >Saved</span>
+        </div>
+        <TablerAlert
+            v-if='pliError'
+            class='mt-3'
+            :err='pliError'
+        />
+    </TablerBorder>
 </template>
 
 <script setup lang='ts'>
 import { computed, ref, watch } from 'vue';
-import { TablerInput, TablerAlert } from '@tak-ps/vue-tabler';
+import {
+    TablerInput,
+    TablerAlert,
+    TablerBorder,
+    TablerEnum,
+    TablerToggle,
+} from '@tak-ps/vue-tabler';
 import { IconDeviceFloppy, IconPlus, IconX } from '@tabler/icons-vue';
 import NumberedTextList from './NumberedTextList.vue';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
@@ -261,7 +228,32 @@ watch(() => props.username, (username) => {
     callsignLookupText.value = JSON.stringify(local.value.callsignLookup, null, 2);
 });
 
-const regexKeyOptions = computed(() => Object.keys(local.value.regexLookUp));
+const regexKeyOptions = computed(() => {
+    const keys = Object.keys(local.value.regexLookUp);
+    return keys.length ? keys : [''];
+});
+
+function connectKeyDisplay(id: string): string {
+    const key = local.value.connectKeys.find((k) => k.id === id);
+    if (!key) return id;
+    return key.label || key.connectKey || key.id;
+}
+
+const connectKeyLabels = computed(() => {
+    return local.value.connectKeys.map((k) => connectKeyDisplay(k.id));
+});
+
+function connectKeyLabelForRule(connectKeyId: string): string {
+    return connectKeyDisplay(connectKeyId);
+}
+
+function setRuleConnectKey(index: number, label: string): void {
+    const key = local.value.connectKeys.find((k) => connectKeyDisplay(k.id) === label);
+    if (!key) return;
+    const rules = [...local.value.regexRules];
+    rules[index] = { ...rules[index], connectKeyId: key.id };
+    local.value = { ...local.value, regexRules: rules };
+}
 
 function addConnectKeyRow(): void {
     local.value = addConnectKey(local.value);
@@ -328,13 +320,3 @@ function savePli(): void {
     }
 }
 </script>
-
-<style scoped>
-.operational-hazard-section-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    opacity: 0.85;
-}
-</style>

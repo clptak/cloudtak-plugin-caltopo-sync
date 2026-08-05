@@ -1,39 +1,44 @@
 <template>
-    <div :class='embedded ? "settings-panel-embedded" : "col-12 py-3"'>
-        <div class='card mb-3'>
-            <div class='card-header'>
-                <div class='card-title'>
+    <div
+        class='settings-panel'
+        :class='embedded ? "" : "px-3 py-3"'
+    >
+        <TablerBorder
+            class='cloudtak-accent text-white mb-3'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <p class='text-uppercase text-white-50 small mb-0'>
                     Caltopo Settings
-                </div>
-            </div>
-            <div class='card-body'>
-                <div class='mb-3'>
+                </p>
+            </template>
+
+            <div class='row g-2'>
+                <div class='col-12'>
                     <TablerInput
                         v-model='caltopo.credentialKey'
                         label='Credential Key'
                         placeholder='Caltopo credential key'
                     />
                 </div>
-                <div class='mb-3'>
+                <div class='col-12'>
                     <TablerInput
                         v-model='caltopo.credentialId'
                         label='Credential ID'
                         placeholder='Caltopo credential ID'
                     />
                 </div>
-                <div class='mb-3'>
+                <div class='col-12'>
                     <TablerInput
                         v-model='caltopo.accountId'
                         label='Team (Folder) ID'
                         placeholder='e.g. SUVCDH'
+                        description='The 6-character ID of the team/folder where maps should be created and where your credential has write rights — not your parent account ID. Find it in the team admin URL: caltopo.com/group/<TEAM_ID>/admin/details'
                     />
-                    <small class='text-muted'>
-                        The 6-character ID of the team/folder where maps should be created and
-                        where your credential has write rights — not your parent account ID. Find
-                        it in the team admin URL: caltopo.com/group/&lt;TEAM_ID&gt;/admin/details
-                    </small>
                 </div>
-                <div class='d-flex align-items-center'>
+                <div class='col-12 d-flex align-items-center'>
                     <button
                         type='button'
                         class='btn btn-primary'
@@ -58,21 +63,27 @@
                     </span>
                 </div>
             </div>
-        </div>
+        </TablerBorder>
 
         <PliSettingsPanel
             v-if='currentUsername'
             :username='currentUsername'
         />
 
-        <div class='card'>
-            <div class='card-header'>
-                <div class='card-title'>
+        <TablerBorder
+            class='cloudtak-accent text-white'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <p class='text-uppercase text-white-50 small mb-0'>
                     Node-RED Connection
-                </div>
-            </div>
-            <div class='card-body'>
-                <div class='mb-3'>
+                </p>
+            </template>
+
+            <div class='row g-2'>
+                <div class='col-12'>
                     <TablerInput
                         v-model='localUrl'
                         label='Node-RED Base URL'
@@ -80,7 +91,7 @@
                         :description='`Base URL of the Node-RED instance hosting the CalTAKsync subflow. Stored locally under "caltopo-sync-nodered-url".`'
                     />
                 </div>
-                <div class='d-flex align-items-center'>
+                <div class='col-12 d-flex align-items-center'>
                     <button
                         type='button'
                         class='btn btn-primary'
@@ -103,7 +114,7 @@
                     </button>
                 </div>
             </div>
-        </div>
+        </TablerBorder>
 
         <TablerLoading
             v-if='testing'
@@ -118,34 +129,36 @@
             :err='error'
         />
 
-        <div
+        <TablerBorder
             v-else-if='store.lastHealth'
-            class='card mt-3'
+            class='cloudtak-accent text-white mt-3'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
         >
-            <div class='card-header'>
-                <div class='card-title'>
+            <template #label>
+                <p class='text-uppercase text-white-50 small mb-0'>
                     Last Health Check
-                </div>
-            </div>
-            <div class='card-body'>
-                <HealthRow
-                    label='Caltopo credentials'
-                    :ok='store.lastHealth.caltopo_creds_ok'
-                />
-                <HealthRow
-                    label='PostGIS reachable'
-                    :ok='store.lastHealth.postgis_ok'
-                />
-                <HealthRow
-                    label='Icon configs present'
-                    :ok='store.lastHealth.icon_configs_ok'
-                />
-                <HealthRow
-                    label='TAK server reachable'
-                    :ok='store.lastHealth.tak_reachable'
-                />
-            </div>
-        </div>
+                </p>
+            </template>
+
+            <HealthRow
+                label='Caltopo credentials'
+                :ok='store.lastHealth.caltopo_creds_ok'
+            />
+            <HealthRow
+                label='PostGIS reachable'
+                :ok='store.lastHealth.postgis_ok'
+            />
+            <HealthRow
+                label='Icon configs present'
+                :ok='store.lastHealth.icon_configs_ok'
+            />
+            <HealthRow
+                label='TAK server reachable'
+                :ok='store.lastHealth.tak_reachable'
+            />
+        </TablerBorder>
     </div>
 </template>
 
@@ -155,6 +168,7 @@ import {
     TablerInput,
     TablerLoading,
     TablerAlert,
+    TablerBorder,
 } from '@tak-ps/vue-tabler';
 import {
     IconPlugConnected,
@@ -283,7 +297,18 @@ async function saveAndTest() {
 </script>
 
 <style scoped>
-.settings-panel-embedded {
-    padding: 1rem;
+.settings-panel {
+    --tabler-input-bg: var(--cloudtak-inset-bg);
+    --tblr-bg-forms: var(--cloudtak-inset-bg);
+}
+
+.settings-panel :deep(.cloudtak-bg),
+.settings-panel :deep(.card) {
+    background-color: var(--cloudtak-inset-bg) !important;
+    border-color: var(--cloudtak-inset-border);
+}
+
+.settings-panel :deep(.card-header) {
+    background-color: transparent !important;
 }
 </style>

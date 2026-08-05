@@ -73,21 +73,13 @@
                     </div>
                     <div
                         v-if='result._signal?.caltopo_synthetic || result._signal?.tak_synthetic'
-                        class='mt-3 alert alert-warning mb-0'
+                        class='mt-3'
                     >
-                        <div class='d-flex align-items-center'>
-                            <IconInfoCircle
-                                :size='18'
-                                stroke='1'
-                            />
-                            <span class='ms-2'>
-                                Best-effort completion: no terminal signal received from
-                                <span v-if='result._signal?.caltopo_synthetic'>Caltopo</span>
-                                <span v-if='result._signal?.caltopo_synthetic && result._signal?.tak_synthetic'> and </span>
-                                <span v-if='result._signal?.tak_synthetic'>TAK</span>
-                                direction (likely empty side). Counts are derived rather than transactional.
-                            </span>
-                        </div>
+                        <TablerInlineAlert
+                            severity='warning'
+                            title='Best-effort completion'
+                            :description='syntheticDescription'
+                        />
                     </div>
                     <div
                         v-if='displayErrors.length'
@@ -131,7 +123,8 @@
 
 <script setup lang='ts'>
 import { computed } from 'vue';
-import { IconClock, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-vue';
+import { IconClock, IconAlertTriangle } from '@tabler/icons-vue';
+import { TablerInlineAlert } from '@tak-ps/vue-tabler';
 import type { PropType } from 'vue';
 import type { SyncResult } from '../types.ts';
 
@@ -153,6 +146,14 @@ const SUPPRESSED_WHEN_SYNTHETIC = [
     'overall safety timeout',
     'stale-delete skipped: both directions synthetic',
 ];
+
+const syntheticDescription = computed(() => {
+    const parts: string[] = [];
+    if (props.result._signal?.caltopo_synthetic) parts.push('Caltopo');
+    if (props.result._signal?.tak_synthetic) parts.push('TAK');
+    const from = parts.join(' and ');
+    return `No terminal signal received from ${from} direction (likely empty side). Counts are derived rather than transactional.`;
+});
 
 const displayErrors = computed(() => {
     const errors = props.result.errors || [];

@@ -1,5 +1,5 @@
 <template>
-    <div class='col-12 py-3 caltopo-sync-panel'>
+    <div class='caltopo-sync-panel px-3 py-3'>
         <div class='d-flex align-items-center gap-2 mb-3'>
             <TablerIconButton
                 class='ms-auto'
@@ -13,218 +13,164 @@
             </TablerIconButton>
         </div>
 
-        <div class='card'>
-            <div class='card-header'>
-                <div class='card-title'>
+        <TablerBorder
+            class='cloudtak-accent text-white'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <p class='text-uppercase text-white-50 small mb-0'>
                     Add Pair
-                </div>
-            </div>
-            <div class='card-body'>
-                <TablerInlineAlert
-                    v-if='caltopoCredsIncomplete'
-                    class='mb-3'
-                    severity='info'
-                    title='Caltopo credentials missing'
-                    description='Add your Caltopo credentials under Settings (gear icon).'
-                />
-                <TablerInlineAlert
-                    class='mb-3'
-                    severity='warning'
-                    title='Warning'
-                    description='Caltopo Map Share Setting MUST be set to "URL"'
-                />
-                <div class='row g-2'>
-                    <div class='col-12 col-md-5'>
-                        <TablerInput
-                            v-model='form.caltopo_map_id'
-                            label='Caltopo Map ID'
-                            placeholder='e.g. ABCD1'
-                        />
-                        <div class='text-center text-muted fw-bold my-2'>
-                            OR
-                        </div>
-                        <div class='d-flex align-items-center justify-content-between'>
-                            <label class='form-label mb-0'>Caltopo Map (from account)</label>
-                            <button
-                                type='button'
-                                class='btn btn-sm btn-link p-0'
-                                :disabled='caltopoMapsLoading'
-                                title='Reload maps from the Caltopo account'
-                                @click='loadCaltopoMaps'
-                            >
-                                <IconRefresh
-                                    :size='16'
-                                    stroke='1'
-                                    :class='caltopoMapsLoading ? "spin-animation" : ""'
-                                />
-                            </button>
-                        </div>
-                        <select
-                            v-model='selectedCaltopoMap'
-                            class='form-select'
-                            :disabled='caltopoMapsLoading || !caltopoMaps.length'
-                            @change='onCaltopoMapSelected'
-                        >
-                            <option value=''>
-                                {{ caltopoMapsLoading
-                                    ? 'Loading maps…'
-                                    : (caltopoMaps.length ? 'Select a map…' : 'No maps available') }}
-                            </option>
-                            <option
-                                v-for='m in caltopoMaps'
-                                :key='m.id'
-                                :value='m.id'
-                            >
-                                {{ m.name }} ({{ m.id }})
-                            </option>
-                        </select>
-                        <TablerAlert
-                            v-if='caltopoMapsError'
-                            class='mt-2'
-                            :err='caltopoMapsError'
-                        />
+                </p>
+            </template>
+
+            <TablerInlineAlert
+                v-if='caltopoCredsIncomplete'
+                class='mb-2'
+                severity='info'
+                title='Caltopo credentials missing'
+                description='Add your Caltopo credentials under Settings (gear icon).'
+            />
+            <TablerInlineAlert
+                class='mb-2'
+                severity='warning'
+                title='Warning'
+                description='Caltopo Map Share Setting MUST be set to "URL"'
+            />
+            <div class='row g-2'>
+                <div class='col-12 col-md-5'>
+                    <TablerInput
+                        v-model='form.caltopo_map_id'
+                        label='Caltopo Map ID'
+                        placeholder='e.g. ABCD1'
+                    />
+                    <div class='text-center text-muted fw-bold my-2'>
+                        OR
                     </div>
-                    <div class='col-12 col-md-5'>
-                        <label class='form-label'>TAK Mission</label>
-                        <select
-                            v-model='form.tak_mission_id'
-                            class='form-select'
-                            :disabled='missionsLoading'
-                        >
-                            <option value=''>
-                                {{ missionsLoading ? 'Loading missions…' : 'Select a mission…' }}
-                            </option>
-                            <option
-                                v-for='m in missions'
-                                :key='m.guid'
-                                :value='m.guid'
-                            >
-                                {{ m.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class='col-12 col-md-2 d-flex align-items-end'>
+                    <div class='d-flex align-items-center justify-content-between mb-1'>
+                        <span class='small text-white-50'>Caltopo Map (from account)</span>
                         <button
                             type='button'
-                            class='btn btn-primary w-100'
-                            :disabled='!canSubmit || saving'
-                            @click='submit'
+                            class='btn btn-sm btn-link p-0'
+                            :disabled='caltopoMapsLoading'
+                            title='Reload maps from the Caltopo account'
+                            @click='loadCaltopoMaps'
                         >
-                            <IconPlus
-                                :size='18'
+                            <IconRefresh
+                                :size='16'
                                 stroke='1'
+                                :class='caltopoMapsLoading ? "spin-animation" : ""'
                             />
-                            <span class='ms-1'>Add</span>
                         </button>
                     </div>
-                </div>
-                <div class='mt-2'>
-                    <label class='form-label'>Sync mode</label>
-                    <select
-                        v-model='form.sync_mode'
-                        class='form-select'
-                    >
-                        <option
-                            v-for='opt in SYNC_MODE_OPTIONS'
-                            :key='opt.value'
-                            :value='opt.value'
-                        >
-                            {{ opt.label }}
-                        </option>
-                    </select>
-                    <div
-                        class='form-hint text-muted small mt-1'
-                        v-text='syncModeHint(form.sync_mode)'
+                    <TablerEnum
+                        v-model='selectedCaltopoMapLabel'
+                        label='Caltopo Map'
+                        :options='caltopoMapEnumOptions'
+                        :disabled='caltopoMapsLoading || !caltopoMaps.length'
                     />
-                </div>
-                <div class='mt-2'>
-                    <TablerInput
-                        v-model='form.label'
-                        label='Label (optional)'
-                        placeholder='Friendly name'
-                    />
-                </div>
-                <div class='mt-3 border rounded p-3'>
-                    <div class='form-check form-switch'>
-                        <input
-                            id='share-pli-toggle'
-                            v-model='form.share_pli'
-                            class='form-check-input'
-                            type='checkbox'
-                        >
-                        <label
-                            class='form-check-label'
-                            for='share-pli-toggle'
-                        >
-                            Share PLI
-                        </label>
-                    </div>
-                    <div
-                        v-if='form.share_pli'
+                    <TablerAlert
+                        v-if='caltopoMapsError'
                         class='mt-2'
-                    >
-                        <label class='form-label'>Fallback CalTopo Connect Key</label>
-                        <select
-                            v-model='form.pli_connect_key_id'
-                            class='form-select'
-                        >
-                            <option value=''>
-                                Use first configured key
-                            </option>
-                            <option
-                                v-for='key in connectKeyOptions'
-                                :key='key.id'
-                                :value='key.id'
-                            >
-                                {{ key.label || key.connectKey || key.id }}
-                            </option>
-                        </select>
-                        <div class='input-group mt-2'>
-                            <span class='input-group-text'>Every</span>
-                            <input
-                                v-model.number='form.pli_interval_sec'
-                                type='number'
-                                class='form-control'
-                                :min='PLI_MIN_INTERVAL_SEC'
-                                step='1'
-                            >
-                            <span class='input-group-text'>s (CalTopo→TAK poll)</span>
-                        </div>
-                        <small class='text-muted d-block mt-1'>
-                            TAK→CalTopo follows live map PLI. Configure connect keys and regex routing in Settings.
-                        </small>
-                    </div>
+                        :err='caltopoMapsError'
+                    />
                 </div>
-                <TablerAlert
-                    v-if='formError'
-                    class='mt-3'
-                    :err='formError'
+                <div class='col-12 col-md-5'>
+                    <TablerEnum
+                        v-model='selectedMissionLabel'
+                        label='TAK Mission'
+                        :options='missionEnumOptions'
+                        :disabled='missionsLoading'
+                    />
+                </div>
+                <div class='col-12 col-md-2 d-flex align-items-end'>
+                    <button
+                        type='button'
+                        class='btn btn-primary w-100'
+                        :disabled='!canSubmit || saving'
+                        @click='submit'
+                    >
+                        <IconPlus
+                            :size='18'
+                            stroke='1'
+                        />
+                        <span class='ms-1'>Add</span>
+                    </button>
+                </div>
+            </div>
+            <div class='mt-2'>
+                <TablerEnum
+                    v-model='syncModeLabel'
+                    label='Sync Mode'
+                    :options='syncModeEnumOptions'
+                    :description='syncModeHint(form.sync_mode)'
                 />
             </div>
-        </div>
-
-        <div class='card mt-3'>
-            <div
-                class='card-header cursor-pointer'
-                role='button'
-                @click='createMapOpen = !createMapOpen'
-            >
-                <div class='card-title'>
-                    Create Caltopo Map
+            <div class='mt-2'>
+                <TablerInput
+                    v-model='form.label'
+                    label='Label (optional)'
+                    placeholder='Friendly name'
+                />
+            </div>
+            <div class='mt-3 cloudtak-accent border rounded-3 text-white px-2 py-2'>
+                <TablerToggle
+                    v-model='form.share_pli'
+                    label='Share PLI'
+                />
+                <div
+                    v-if='form.share_pli'
+                    class='mt-2'
+                >
+                    <TablerEnum
+                        v-model='pliConnectKeyLabel'
+                        label='Fallback CalTopo Connect Key'
+                        :options='pliConnectKeyEnumOptions'
+                    />
+                    <TablerInput
+                        v-model='form.pli_interval_sec'
+                        class='mt-2'
+                        label='CalTopo→TAK Poll Interval (seconds)'
+                        type='number'
+                    />
+                    <small class='text-muted d-block mt-1'>
+                        TAK→CalTopo follows live map PLI. Configure connect keys and regex routing in Settings.
+                    </small>
                 </div>
-                <div class='ms-auto'>
+            </div>
+            <TablerAlert
+                v-if='formError'
+                class='mt-3'
+                :err='formError'
+            />
+        </TablerBorder>
+
+        <TablerBorder
+            class='cloudtak-accent text-white mt-3'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <div
+                    class='d-flex align-items-center w-100 cursor-pointer'
+                    role='button'
+                    @click='createMapOpen = !createMapOpen'
+                >
+                    <p class='text-uppercase text-white-50 small mb-0'>
+                        Create Caltopo Map
+                    </p>
                     <IconChevronDown
                         :size='20'
                         stroke='1'
-                        class='create-map-chevron'
+                        class='ms-auto create-map-chevron'
                         :class='{ "create-map-chevron-open": createMapOpen }'
                     />
                 </div>
-            </div>
-            <div
-                v-show='createMapOpen'
-                class='card-body'
-            >
+            </template>
+
+            <div v-show='createMapOpen'>
                 <p>
                     Create a
                     <IconAmbulance
@@ -235,31 +181,35 @@
                     TAK DataSync first and set it as the Active DataSync. This will create a
                     Caltopo Map with the same mission name as your Active DataSync.
                 </p>
-                <div class='mb-3'>
-                    <TablerInput
-                        v-model='createMapForm.call_location'
-                        label='Call Location:'
-                        placeholder='Coordinates for call'
-                    />
+                <div class='row g-2'>
+                    <div class='col-12'>
+                        <TablerInput
+                            v-model='createMapForm.call_location'
+                            label='Call Location'
+                            placeholder='Coordinates for call'
+                        />
+                    </div>
+                    <div class='col-12'>
+                        <TablerInput
+                            v-model='createMapForm.dr_or_activity'
+                            label='DR or Activity #'
+                        />
+                    </div>
+                    <div class='col-12'>
+                        <button
+                            type='button'
+                            class='btn btn-primary w-100'
+                            :disabled='creatingMap || !canCreateMap'
+                            @click='createCaltopoMapHandler'
+                        >
+                            <IconMap
+                                :size='18'
+                                stroke='1'
+                            />
+                            <span class='ms-2'>{{ creatingMap ? 'Creating…' : 'Create Caltopo Map' }}</span>
+                        </button>
+                    </div>
                 </div>
-                <div class='mb-3'>
-                    <TablerInput
-                        v-model='createMapForm.dr_or_activity'
-                        label='DR or Activity #:'
-                    />
-                </div>
-                <button
-                    type='button'
-                    class='btn btn-primary'
-                    :disabled='creatingMap || !canCreateMap'
-                    @click='createCaltopoMapHandler'
-                >
-                    <IconMap
-                        :size='18'
-                        stroke='1'
-                    />
-                    <span class='ms-2'>{{ creatingMap ? 'Creating…' : 'Create Caltopo Map' }}</span>
-                </button>
                 <div
                     v-if='!activeMissionName'
                     class='text-muted small mt-2'
@@ -272,43 +222,45 @@
                     class='mt-3'
                     :err='createMapError'
                 />
-                <div
+                <TablerInlineAlert
                     v-if='createdMapId'
-                    class='alert alert-success mt-3 mb-0'
-                >
-                    Created Caltopo map
-                    <code v-text='createdMapId' />
-                    — map ID copied into the Add Pair form above.
-                </div>
+                    class='mt-3'
+                    severity='success'
+                    title='Map Created'
+                    :description='`Created Caltopo map ${createdMapId} — map ID copied into the Add Pair form above.`'
+                />
                 <p class='text-muted small mt-3 mb-0'>
                     This creates a map with Map Share settings at URL. Please remember to change it
                     to a higher level of security when the mission is no longer active.
                 </p>
             </div>
-        </div>
+        </TablerBorder>
 
-        <div class='card mt-3'>
-            <div
-                class='card-header cursor-pointer'
-                role='button'
-                @click='downloadGeojsonOpen = !downloadGeojsonOpen'
-            >
-                <div class='card-title'>
-                    Download Caltopo-friendly GeoJSON File
-                </div>
-                <div class='ms-auto'>
+        <TablerBorder
+            class='cloudtak-accent text-white mt-3'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <div
+                    class='d-flex align-items-center w-100 cursor-pointer'
+                    role='button'
+                    @click='downloadGeojsonOpen = !downloadGeojsonOpen'
+                >
+                    <p class='text-uppercase text-white-50 small mb-0'>
+                        Download Caltopo-Friendly GeoJSON File
+                    </p>
                     <IconChevronDown
                         :size='20'
                         stroke='1'
-                        class='create-map-chevron'
+                        class='ms-auto create-map-chevron'
                         :class='{ "create-map-chevron-open": downloadGeojsonOpen }'
                     />
                 </div>
-            </div>
-            <div
-                v-show='downloadGeojsonOpen'
-                class='card-body'
-            >
+            </template>
+
+            <div v-show='downloadGeojsonOpen'>
                 <p class='text-muted'>
                     Download a TAK Mission's features as GeoJSON, rewritten for Caltopo:
                     every <code>callsign</code> key becomes <code>title</code>, every
@@ -316,57 +268,56 @@
                     point's TAK icon is translated to a Caltopo <code>marker-symbol</code>.
                     The file is saved with a <code>.json</code> extension.
                 </p>
-                <div class='mb-3'>
-                    <label class='form-label'>TAK Mission</label>
-                    <select
-                        v-model='downloadMissionId'
-                        class='form-select'
-                        :disabled='missionsLoading'
-                    >
-                        <option value=''>
-                            {{ missionsLoading ? 'Loading missions…' : 'Select a mission…' }}
-                        </option>
-                        <option
-                            v-for='m in missions'
-                            :key='m.guid'
-                            :value='m.guid'
+                <div class='row g-2'>
+                    <div class='col-12'>
+                        <TablerEnum
+                            v-model='downloadMissionLabel'
+                            label='TAK Mission'
+                            :options='missionEnumOptions'
+                            :disabled='missionsLoading'
+                        />
+                    </div>
+                    <div class='col-12'>
+                        <button
+                            type='button'
+                            class='btn btn-primary w-100'
+                            :disabled='downloadingGeojson || !downloadMissionId'
+                            @click='downloadCaltopoGeojson'
                         >
-                            {{ m.name }}
-                        </option>
-                    </select>
+                            <IconDownload
+                                :size='18'
+                                stroke='1'
+                            />
+                            <span class='ms-2'>{{ downloadingGeojson ? 'Preparing…' : 'Download GeoJSON' }}</span>
+                        </button>
+                    </div>
                 </div>
-                <button
-                    type='button'
-                    class='btn btn-primary'
-                    :disabled='downloadingGeojson || !downloadMissionId'
-                    @click='downloadCaltopoGeojson'
-                >
-                    <IconDownload
-                        :size='18'
-                        stroke='1'
-                    />
-                    <span class='ms-2'>{{ downloadingGeojson ? 'Preparing…' : 'Download GeoJSON' }}</span>
-                </button>
                 <TablerAlert
                     v-if='downloadGeojsonError'
                     class='mt-3'
                     :err='downloadGeojsonError'
                 />
             </div>
-        </div>
+        </TablerBorder>
 
-        <div class='card mt-3'>
-            <div class='card-header d-flex align-items-center'>
-                <div class='card-title'>
+        <TablerBorder
+            class='cloudtak-accent text-white mt-3'
+            :fill-height='false'
+            :shadow='false'
+            gap='sm'
+        >
+            <template #label>
+                <p class='text-uppercase text-white-50 small mb-0'>
                     Pairs
-                </div>
-                <div class='ms-auto'>
-                    <TablerRefreshButton
-                        :loading='pairsLoading'
-                        @click='fetchPairs'
-                    />
-                </div>
-            </div>
+                </p>
+            </template>
+            <template #header>
+                <TablerRefreshButton
+                    :loading='pairsLoading'
+                    @click='fetchPairs'
+                />
+            </template>
+
             <TablerLoading
                 v-if='pairsLoading'
                 :compact='true'
@@ -404,21 +355,12 @@
                         >
                             <td v-text='pair.label || "—"' />
                             <td>
-                                <select
-                                    class='form-select form-select-sm'
-                                    style='min-width: 11rem'
-                                    :value='pair.sync_mode ?? "bidirectional"'
+                                <TablerEnum
+                                    :model-value='pairSyncModeShortLabel(pair)'
+                                    :options='syncModeShortEnumOptions'
                                     :disabled='updatingPairId === pair.id || syncingId === pair.id'
-                                    @change='onSyncModeChange(pair, ($event.target as HTMLSelectElement).value as SyncMode)'
-                                >
-                                    <option
-                                        v-for='opt in SYNC_MODE_OPTIONS'
-                                        :key='opt.value'
-                                        :value='opt.value'
-                                    >
-                                        {{ opt.shortLabel }}
-                                    </option>
-                                </select>
+                                    @update:model-value='onPairSyncModeLabelChange(pair, $event)'
+                                />
                             </td>
                             <td>
                                 <code v-text='pair.caltopo_map_id' />
@@ -589,7 +531,7 @@
                     </tbody>
                 </table>
             </div>
-        </div>
+        </TablerBorder>
 
         <!-- Settings modal (no Teleport — works inside popout window) -->
         <div
@@ -647,6 +589,9 @@ import {
     TablerRefreshButton,
     TablerInlineAlert,
     TablerIconButton,
+    TablerBorder,
+    TablerEnum,
+    TablerToggle,
 } from '@tak-ps/vue-tabler';
 import {
     IconPlus,
@@ -698,12 +643,28 @@ const missionsLoading = ref(false);
 const caltopoMaps = ref<CaltopoMapOption[]>([]);
 const caltopoMapsLoading = ref(false);
 const caltopoMapsError = ref<Error | undefined>();
-const selectedCaltopoMap = ref<string>('');
 
-function onCaltopoMapSelected() {
-    if (selectedCaltopoMap.value) {
-        form.value.caltopo_map_id = selectedCaltopoMap.value;
-    }
+const CALTOPO_MAP_PLACEHOLDER = 'Select a map…';
+const CALTOPO_MAP_LOADING = 'Loading maps…';
+const CALTOPO_MAP_EMPTY = 'No maps available';
+const MISSION_PLACEHOLDER = 'Select a mission…';
+const MISSION_LOADING = 'Loading missions…';
+const PLI_KEY_DEFAULT = 'Use first configured key';
+
+function caltopoMapOptionLabel(m: CaltopoMapOption): string {
+    return `${m.name} (${m.id})`;
+}
+
+function missionLabelToGuid(label: string): string {
+    if (label === MISSION_PLACEHOLDER || label === MISSION_LOADING) return '';
+    const match = missions.value.find((m) => m.name === label);
+    return match?.guid ?? '';
+}
+
+function guidToMissionLabel(guid: string): string {
+    if (missionsLoading.value) return MISSION_LOADING;
+    const match = missions.value.find((m) => m.guid === guid);
+    return match ? match.name : MISSION_PLACEHOLDER;
 }
 
 // Loads the CollaborativeMaps in the configured team/account so the user can
@@ -929,6 +890,107 @@ const forceResync = ref<Record<number, boolean>>({});
 const connectKeyOptions = computed<ConnectKeyEntry[]>(() => {
     return listConnectKeyOptions(store.pliSettings);
 });
+
+const caltopoMapEnumOptions = computed(() => {
+    if (caltopoMapsLoading.value) return [CALTOPO_MAP_LOADING];
+    if (!caltopoMaps.value.length) return [CALTOPO_MAP_EMPTY];
+    return [CALTOPO_MAP_PLACEHOLDER, ...caltopoMaps.value.map(caltopoMapOptionLabel)];
+});
+
+const selectedCaltopoMapLabel = computed({
+    get(): string {
+        if (caltopoMapsLoading.value) return CALTOPO_MAP_LOADING;
+        if (!caltopoMaps.value.length) return CALTOPO_MAP_EMPTY;
+        const id = form.value.caltopo_map_id.trim();
+        const match = caltopoMaps.value.find((m) => m.id === id);
+        return match ? caltopoMapOptionLabel(match) : CALTOPO_MAP_PLACEHOLDER;
+    },
+    set(label: string) {
+        if (
+            label === CALTOPO_MAP_PLACEHOLDER
+            || label === CALTOPO_MAP_LOADING
+            || label === CALTOPO_MAP_EMPTY
+        ) {
+            return;
+        }
+        const match = caltopoMaps.value.find((m) => caltopoMapOptionLabel(m) === label);
+        if (match) {
+            form.value.caltopo_map_id = match.id;
+        }
+    },
+});
+
+const missionEnumOptions = computed(() => {
+    if (missionsLoading.value) return [MISSION_LOADING];
+    return [MISSION_PLACEHOLDER, ...missions.value.map((m) => m.name)];
+});
+
+const selectedMissionLabel = computed({
+    get(): string {
+        return guidToMissionLabel(form.value.tak_mission_id);
+    },
+    set(label: string) {
+        form.value.tak_mission_id = missionLabelToGuid(label);
+    },
+});
+
+const downloadMissionLabel = computed({
+    get(): string {
+        return guidToMissionLabel(downloadMissionId.value);
+    },
+    set(label: string) {
+        downloadMissionId.value = missionLabelToGuid(label);
+    },
+});
+
+const syncModeEnumOptions = computed(() => SYNC_MODE_OPTIONS.map((o) => o.label));
+const syncModeShortEnumOptions = computed(() => SYNC_MODE_OPTIONS.map((o) => o.shortLabel));
+
+const syncModeLabel = computed({
+    get(): string {
+        const opt = SYNC_MODE_OPTIONS.find((o) => o.value === form.value.sync_mode);
+        return opt?.label ?? SYNC_MODE_OPTIONS[0].label;
+    },
+    set(label: string) {
+        const opt = SYNC_MODE_OPTIONS.find((o) => o.label === label);
+        if (opt) form.value.sync_mode = opt.value;
+    },
+});
+
+function connectKeyDisplay(key: ConnectKeyEntry): string {
+    return key.label || key.connectKey || key.id;
+}
+
+const pliConnectKeyEnumOptions = computed(() => {
+    return [PLI_KEY_DEFAULT, ...connectKeyOptions.value.map(connectKeyDisplay)];
+});
+
+const pliConnectKeyLabel = computed({
+    get(): string {
+        if (!form.value.pli_connect_key_id) return PLI_KEY_DEFAULT;
+        const key = connectKeyOptions.value.find((k) => k.id === form.value.pli_connect_key_id);
+        return key ? connectKeyDisplay(key) : PLI_KEY_DEFAULT;
+    },
+    set(label: string) {
+        if (label === PLI_KEY_DEFAULT) {
+            form.value.pli_connect_key_id = '';
+            return;
+        }
+        const key = connectKeyOptions.value.find((k) => connectKeyDisplay(k) === label);
+        form.value.pli_connect_key_id = key?.id ?? '';
+    },
+});
+
+function pairSyncModeShortLabel(pair: Pair): string {
+    const mode = pair.sync_mode ?? 'bidirectional';
+    const opt = SYNC_MODE_OPTIONS.find((o) => o.value === mode);
+    return opt?.shortLabel ?? SYNC_MODE_OPTIONS[0].shortLabel;
+}
+
+function onPairSyncModeLabelChange(pair: Pair, shortLabel: string) {
+    const opt = SYNC_MODE_OPTIONS.find((o) => o.shortLabel === shortLabel);
+    if (opt) void onSyncModeChange(pair, opt.value);
+}
 
 function onIntervalInput(pairId: number, raw: string) {
     const n = parseInt(raw, 10);
@@ -1186,12 +1248,19 @@ async function removeMissionLayer(pair: Pair): Promise<void> {
 </script>
 
 <style scoped>
+.caltopo-sync-panel {
+    --tabler-input-bg: var(--cloudtak-inset-bg);
+    --tblr-bg-forms: var(--cloudtak-inset-bg);
+}
+
+.caltopo-sync-panel :deep(.cloudtak-bg),
 .caltopo-sync-panel :deep(.card) {
-    border-color: #CE5F32;
+    background-color: var(--cloudtak-inset-bg) !important;
+    border-color: var(--cloudtak-inset-border);
 }
 
 .caltopo-sync-panel :deep(.card-header) {
-    border-bottom-color: #CE5F32;
+    background-color: transparent !important;
 }
 
 .spin-animation {
