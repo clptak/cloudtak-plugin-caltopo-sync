@@ -3,6 +3,14 @@
         class='settings-panel'
         :class='embedded ? "" : "px-3 py-3"'
     >
+        <p
+            v-if='deploymentConfigured'
+            class='text-muted mb-3'
+        >
+            These values are already filled in for this CloudTAK.
+            Edit a field only to override the deployment value.
+        </p>
+
         <TablerBorder
             class='cloudtak-accent text-white mb-3'
             :fill-height='false'
@@ -178,6 +186,7 @@ import {
 } from '@tabler/icons-vue';
 import ProfileConfig from '../../../../src/base/profile.ts';
 import { useCaltopoSyncStore } from '../stores/plugin-state.ts';
+import { hasDeploymentDefaults } from '../storage/deploymentDefaults.ts';
 import { health } from '../api/nodered-client.ts';
 import type { CaltopoSettings } from '../types.ts';
 import PliSettingsPanel from './PliSettingsPanel.vue';
@@ -209,6 +218,7 @@ const HealthRow = defineComponent({
 });
 
 const store = useCaltopoSyncStore();
+const deploymentConfigured = hasDeploymentDefaults();
 const localUrl = ref<string>(store.noderedUrl);
 const testing = ref(false);
 const error = ref<Error | undefined>();

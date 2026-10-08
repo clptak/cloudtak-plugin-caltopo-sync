@@ -19,5 +19,5 @@
         "skipLibCheck": true,
         "types": []
     },
-    "include": ["src/**/*.ts", "src/**/*.vue"]
+    "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts"]
 }

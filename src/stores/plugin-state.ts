@@ -10,6 +10,12 @@ import {
     stopPliShare,
     updatePliShareSettings,
 } from '../lib/pli/pli-share-service.ts';
+import {
+    applyCaltopoDefaults,
+    caltopoForStorage,
+    noderedUrlForStorage,
+    resolveNoderedUrl,
+} from '../storage/settings.ts';
 
 const STORAGE_KEY = 'caltopo-sync-nodered-url';
 const CALTOPO_SETTINGS_PREFIX = 'caltopo-sync-caltopo-settings';
@@ -19,9 +25,9 @@ const AUTO_SYNC_MIN_SECONDS = 30;
 
 function readStoredUrl(): string {
     try {
-        return localStorage.getItem(STORAGE_KEY) ?? '';
+        return resolveNoderedUrl(localStorage.getItem(STORAGE_KEY));
     } catch {
-        return '';
+        return resolveNoderedUrl(null);
     }
 }
 
@@ -68,9 +74,10 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
     function setNoderedUrl(url: string): void {
         const trimmed = url.trim().replace(/\/+$/, '');
         noderedUrl.value = trimmed;
+        const toStore = noderedUrlForStorage(trimmed);
         try {
-            if (trimmed) {
-                localStorage.setItem(STORAGE_KEY, trimmed);
+            if (toStore) {
+                localStorage.setItem(STORAGE_KEY, toStore);
             } else {
                 localStorage.removeItem(STORAGE_KEY);
             }
@@ -85,21 +92,19 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
 
     function loadCaltopoSettings(username: string): CaltopoSettings {
         caltopoSettingsUser.value = username;
+        let stored: Partial<CaltopoSettings> | null = null;
         try {
             const raw = localStorage.getItem(caltopoSettingsKey(username));
             if (raw) {
-                const parsed = JSON.parse(raw) as Partial<CaltopoSettings>;
-                caltopoSettings.value = {
-                    credentialKey: parsed.credentialKey ?? '',
-                    credentialId: parsed.credentialId ?? '',
-                    accountId: parsed.accountId ?? '',
-                };
-            } else {
-                caltopoSettings.value = emptyCaltopoSettings();
+                const parsed: unknown = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    stored = parsed as Partial<CaltopoSettings>;
+                }
             }
         } catch {
-            caltopoSettings.value = emptyCaltopoSettings();
+            stored = null;
         }
+        caltopoSettings.value = applyCaltopoDefaults(stored);
         return caltopoSettings.value;
     }
 
@@ -107,7 +112,10 @@ export const useCaltopoSyncStore = defineStore('caltopo-sync', () => {
         caltopoSettingsUser.value = username;
         caltopoSettings.value = { ...settings };
         try {
-            localStorage.setItem(caltopoSettingsKey(username), JSON.stringify(caltopoSettings.value));
+            localStorage.setItem(
+                caltopoSettingsKey(username),
+                JSON.stringify(caltopoForStorage(settings)),
+            );
         } catch {
             // localStorage may be unavailable (private mode); state is still in memory
         }

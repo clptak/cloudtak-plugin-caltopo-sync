@@ -7,6 +7,7 @@ coverage/
 .env
 .env.*
 !.env.example
+config.local.ts
 .vscode/
 .idea/
 *.swp
