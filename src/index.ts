@@ -8,6 +8,7 @@ import { configurePliRuntime, stopAllPliShare } from './lib/pli/pli-share-servic
 import { useMapStore } from '../../../src/stores/map.ts';
 import { bindFloatPane, cleanupFloatPane, openDesktopPane } from './lib/floatPane.ts';
 import { bindPopout, closePopout } from './lib/popout.ts';
+import { registerIncidentProvider, unregisterIncidentProvider } from './lib/incidentProvider.ts';
 
 const CaltopoSyncFloatShell = defineAsyncComponent(
     () => import('./components/CaltopoSyncFloatShell.vue'),
@@ -41,6 +42,7 @@ export default class CaltopoSyncPlugin implements PluginInstance {
             getAtlasWorker: async () => mapStore.worker,
         });
 
+        registerIncidentProvider(api.pinia);
         bindPopout(api);
         bindFloatPane({
             api,
@@ -83,6 +85,7 @@ export default class CaltopoSyncPlugin implements PluginInstance {
     async disable(): Promise<void> {
         const store = useCaltopoSyncStore(this.api.pinia);
         store.setEnabled(false);
+        unregisterIncidentProvider();
         stopAllPliShare();
         closePopout();
         cleanupFloatPane();

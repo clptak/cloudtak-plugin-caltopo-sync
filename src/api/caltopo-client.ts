@@ -14,8 +14,9 @@ import { caltopoProxy } from './nodered-client.ts';
 export interface BuildCreateMapBodyInput {
     missionName: string;
     drOrActivity: string;
-    lat: number;
-    lon: number;
+    /** Omit both to create the map with no call-location marker. */
+    lat?: number;
+    lon?: number;
 }
 
 // Mirrors docs/caltopo_map_create_body.json: a SAR-mode map shared by URL,
@@ -31,25 +32,30 @@ export function buildCreateMapBody(input: BuildCreateMapBodyInput): CaltopoCreat
         },
         state: {
             type: 'FeatureCollection',
-            features: [
-                {
-                    type: 'Feature',
-                    geometry: {
-                        // GeoJSON / CalTopo coordinate order is [lon, lat].
-                        type: 'Point',
-                        coordinates: [input.lon, input.lat],
-                    },
-                    properties: {
-                        title: input.drOrActivity,
-                        description: `ACTIVE DATASYNC '${input.missionName}'`,
-                        'marker-symbol': 'point',
-                        'marker-color': 'FF0000',
-                        'marker-size': 1,
-                    },
-                },
-            ],
+            features: callLocationFeature(input),
         },
     };
+}
+
+function callLocationFeature(input: BuildCreateMapBodyInput): CaltopoCreateMapPayload['state']['features'] {
+    if (typeof input.lat !== 'number' || typeof input.lon !== 'number') return [];
+    return [
+        {
+            type: 'Feature',
+            geometry: {
+                // GeoJSON / CalTopo coordinate order is [lon, lat].
+                type: 'Point',
+                coordinates: [input.lon, input.lat],
+            },
+            properties: {
+                title: input.drOrActivity,
+                description: `ACTIVE DATASYNC '${input.missionName}'`,
+                'marker-symbol': 'point',
+                'marker-color': 'FF0000',
+                'marker-size': 1,
+            },
+        },
+    ];
 }
 
 export interface CreateCaltopoMapInput {
