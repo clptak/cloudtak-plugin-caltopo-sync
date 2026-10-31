@@ -105,11 +105,16 @@
             title='ETL pairs could not be loaded'
             :description='`${error.message} - only CloudTAK System Administrators can see the pairs run by the CalTopo ETL.`'
         />
-        <TablerNone
-            v-else-if='!pairs.length'
-            label='No ETL Pairs'
-            :create='false'
-        />
+        <div v-else-if='!pairs.length'>
+            <TablerNone
+                label='No ETL Pairs'
+                :create='false'
+            />
+            <p class='text-white-50 small text-center mb-0'>
+                New pairs copy their CalTopo credentials from a CalTopo Sync Layer on the Connection -
+                an admin sets up a Connection's first one in Connections (etl-caltopo docs/ADMIN_PAIRING.md).
+            </p>
+        </div>
         <div
             v-else
             class='table-responsive'
