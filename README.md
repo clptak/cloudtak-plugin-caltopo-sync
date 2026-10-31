@@ -32,6 +32,7 @@ src/                  Vue/TypeScript plugin source
   stores/             Pinia store for plugin-local state
 nodered/              Importable HTTP-In subflow + contract docs
 docs/                 Architecture, auth, conflict policy, discovery reports
+                      (start with docs/cloudtak-etl-guide.md: Connections, Layers & Data Syncs for admins)
 scripts/dev-link.sh   Symlink helper for local development against a CloudTAK checkout
 test/                 Reserved for Phase 4
 ```
