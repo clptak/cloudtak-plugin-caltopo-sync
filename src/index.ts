@@ -3,9 +3,6 @@ import { defineAsyncComponent, defineComponent, h, markRaw, onMounted } from 'vu
 import type { PluginAPI, PluginInstance, PluginStatic } from '../../../plugin.ts';
 import { useAppStore } from '../../../src/stores/app.ts';
 import SartopoCloudtakIcon from './components/SartopoCloudtakIcon.vue';
-import { useCaltopoSyncStore } from './stores/plugin-state.ts';
-import { configurePliRuntime, stopAllPliShare } from './lib/pli/pli-share-service.ts';
-import { useMapStore } from '../../../src/stores/map.ts';
 import { bindFloatPane, cleanupFloatPane, openDesktopPane } from './lib/floatPane.ts';
 import { bindPopout, closePopout } from './lib/popout.ts';
 import { registerIncidentProvider, unregisterIncidentProvider } from './lib/incidentProvider.ts';
@@ -34,14 +31,6 @@ export default class CaltopoSyncPlugin implements PluginInstance {
 
     async enable(): Promise<void> {
         const api = this.api;
-        const store = useCaltopoSyncStore(api.pinia);
-        store.setEnabled(true);
-
-        const mapStore = useMapStore(api.pinia);
-        configurePliRuntime({
-            getAtlasWorker: async () => mapStore.worker,
-        });
-
         registerIncidentProvider(api.pinia);
         bindPopout(api);
         bindFloatPane({
@@ -83,10 +72,7 @@ export default class CaltopoSyncPlugin implements PluginInstance {
     }
 
     async disable(): Promise<void> {
-        const store = useCaltopoSyncStore(this.api.pinia);
-        store.setEnabled(false);
         unregisterIncidentProvider();
-        stopAllPliShare();
         closePopout();
         cleanupFloatPane();
         this.api.menu.remove(MENU_KEY);

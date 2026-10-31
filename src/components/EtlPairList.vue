@@ -387,6 +387,21 @@ async function fetchEtlPairs() {
 
 // The Layers run every minute - refresh on the same beat while the pane is open
 let timer: ReturnType<typeof setInterval> | undefined;
+/** Open the pair form with a map - ie: one just created - and its Mission when it can be paired */
+function prefill(map: string, missionName?: string) {
+    const only = connections.value.length === 1 ? connections.value[0].label : undefined;
+    form.value = {
+        connection: only ?? form.value.connection,
+        mission: missionName && missionOptions.value.includes(missionName) ? missionName : form.value.mission,
+        map,
+    };
+    createError.value = '';
+    createdNote.value = '';
+    formOpen.value = true;
+}
+
+defineExpose({ prefill });
+
 onMounted(() => {
     void fetchEtlPairs();
     timer = setInterval(() => void fetchEtlPairs(), 60 * 1000);

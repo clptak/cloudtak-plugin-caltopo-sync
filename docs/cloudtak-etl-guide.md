@@ -105,7 +105,13 @@ Common errors:
 - **`Failed to post layer to ETL (400 - Submitted)`** – CloudTAK refused some objects; the rest
   went through. Report it with the map ID.
 
-The **Pairs** section further down is the older Node-RED sync, which the ETL replaces.
+## Creating a Caltopo map
+
+**Create Caltopo Map** (below the pair list) makes a new map in the team's Caltopo account, named
+after the active Data Sync, and fills it into the pair form. Behind the scenes it adds a CloudTAK
+**Event** at the call location that asks the CalTopo Layer for a map, so pick channels that include
+the Connection's. The Layer needs its **Outgoing** settings `AccountId` and `TeamId` filled in.
+Events made by other plugins (incidents, field teams) never create maps.
 
 ## Safe and unsafe buttons
 

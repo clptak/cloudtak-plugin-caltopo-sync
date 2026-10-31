@@ -1,192 +1,90 @@
 # cloudtak-plugin-caltopo-sync
 
-A [CloudTAK](https://github.com/dfpc-coe/CloudTAK) frontend plugin that pairs a Caltopo Map with a TAK Mission and lets the user trigger bidirectional delta sync on demand.
+A [CloudTAK](https://github.com/dfpc-coe/CloudTAK) frontend plugin that pairs Caltopo maps with
+TAK Missions. The syncing itself runs in CloudTAK, in the **CloudTAK CalTopo ETL**
+([etl-caltopo](https://github.com/clptak/etl-caltopo)): one Connection Layer per pair, every minute.
+The plugin is the admin's window onto it.
 
-> Status: **Phase 2 scaffold — UI surface complete; Node-RED subflow lives in [`nodered/`](./nodered) (separate ship).**
+New to TAK or CloudTAK? Read [docs/cloudtak-etl-guide.md](./docs/cloudtak-etl-guide.md) first – it
+explains Connections, Layers and Data Syncs and which buttons are safe.
 
-## Architecture (v1)
+## What the plugin does
+
+| Section | What it does | Needs |
+|---|---|---|
+| **CloudTAK ETL Pairs** | Lists every pair with its last run, item counts and errors. **+** pairs a Mission with a Caltopo map as a dry run, **Go Live** starts writing. | CloudTAK System Administrator. A CalTopo Sync Layer with one pair on the Connection to copy credentials from. |
+| **Create Caltopo Map** | Creates a map in the team's Caltopo account and fills it into the pair form. | A CalTopo Layer on the chosen channels with its Outgoing `AccountId`/`TeamId` set, etl-caltopo 5.19.0+. |
+| **Download Caltopo-Friendly GeoJSON** | Saves a Mission's features as GeoJSON that Caltopo imports cleanly. | Nothing. |
+
+It also lets the incident manager plugin create a map for a new Mission
+(`window.__cloudtakCaltopo.createMap`, see `src/lib/incidentProvider.ts`).
+
+No Caltopo credentials or other secrets live in the browser: pair Layers copy theirs from an
+existing Layer on the server, and map creation goes through the ETL.
 
 ```
-┌──────────────────────────┐         ┌────────────────────────┐         ┌──────────┐
-│ CloudTAK browser plugin  │ ──HTTP─▶│ Node-RED sync engine   │ ──API──▶│ Caltopo  │
-│ (this repo)              │         │ (separate Docker host) │ ──API──▶│ TAK Srv  │
-│                          │ ◀───────│  + PostGIS state cache │ ◀───────│          │
-└──────────────────────────┘         └────────────────────────┘         └──────────┘
-       │ Settings panel                       │ Existing flow lives in
-       │ Pair manager                         │ node-red-sarops-docker
-       │ "Sync Now" button                    │ This repo ships only the
-       │ Sync result viewer                   │ thin HTTP-In subflow in nodered/
-       └──────────────────                    └──────────────────
+ Plugin (browser) ──CloudTAK API──▶ CloudTAK ──▶ Connection Layer (AWS Lambda, etl-caltopo)
+   pair list / + / Go Live                         ├─ every minute: Caltopo map ◀──▶ TAK Mission
+   Create Caltopo Map ──▶ CloudTAK Event ─────────▶ ├─ event:create: new Caltopo map
+                          (metadata.caltopo_map)    └─ Outgoing: TAK positions ──▶ Caltopo
 ```
 
-**Sync model:** delta sync (diff against PostGIS state cache), **last-write-wins** per feature, conflict counts surfaced in the response. Manual trigger only — no background job.
+### How Create Caltopo Map works
+
+The plugin creates a CloudTAK **Event** at the call location with `metadata.caltopo_map: true`,
+shared on the channels you pick. The CalTopo Layer receives it (`event:create`), creates the map in
+the team account and files the map ID under the Event's `caltopo` external ID, which the plugin
+waits for (up to two minutes). Only flagged Events get a map, because other plugins create Events
+too – see `MapEvents` in the etl-caltopo README.
+
+## Install (operator)
+
+CloudTAK plugins are compiled into the web app – there is no runtime upload.
+
+```bash
+cd ~/tak-stack/CloudTAK/app/plugins
+git clone git@github.com:clptak/cloudtak-plugin-caltopo-sync.git caltopo-sync
+```
+
+Then rebuild the CloudTAK web app the way your deployment does. To update, `git pull` in that folder
+and rebuild. Browsers can keep serving the previous build from CloudTAK's service worker – close every
+CloudTAK tab and reopen it.
+
+## Develop
+
+```bash
+git clone git@github.com:clptak/cloudtak-plugin-caltopo-sync.git
+cd cloudtak-plugin-caltopo-sync
+npm install
+bash scripts/dev-link.sh /path/to/CloudTAK
+```
+
+`scripts/dev-link.sh` links the repo root to `<CloudTAK>/app/plugins/caltopo-sync`, which is why
+components import CloudTAK internals as `../../../../src/...`. Checks run from the CloudTAK app:
+
+```bash
+cd /path/to/CloudTAK/app
+npx eslint --config eslint.config.js plugins/caltopo-sync/src
+npx vue-tsc --noEmit
+```
+
+Unit tests for the pair planning and map request logic run in this repo with `npm test`.
 
 ## Layout
 
 ```
-src/                  Vue/TypeScript plugin source
-  index.ts            Plugin entry; registers menu + route
-  types.ts            Shared types (Pair, SyncResult, HealthCheck…)
-  api/                Typed HTTP client for the Node-RED contract
-  components/         Settings panel, pair manager, sync trigger, result viewer
-  stores/             Pinia store for plugin-local state
-nodered/              Importable HTTP-In subflow + contract docs
-docs/                 Architecture, auth, conflict policy, discovery reports
-                      (start with docs/cloudtak-etl-guide.md: Connections, Layers & Data Syncs for admins)
-scripts/dev-link.sh   Symlink helper for local development against a CloudTAK checkout
-test/                 Reserved for Phase 4
+src/
+  index.ts                     Plugin entry: menu, route, float pane, incident manager hook
+  api/cloudtak-etl-client.ts   Lists, creates and goes live with ETL pairs through CloudTAK's API
+  api/caltopo-map-client.ts    Creates a map through a flagged Event and waits for the ETL
+  lib/etl-pairs.ts             Pairs and their status from a Layer
+  lib/etl-pair-plan.ts         What a new pair creates - the safety rules, tested
+  lib/caltopo-map-event.ts     The flagged Event body, tested
+  components/PairManager.vue   The panel
+  components/EtlPairList.vue   CloudTAK ETL Pairs
+docs/cloudtak-etl-guide.md     Guide for admins new to TAK
+test/                          node --test unit tests
 ```
-
-## Install (operator)
-
-CloudTAK plugins are **compile-time vendored** — there is no runtime upload UI. To ship this plugin to a CloudTAK deployment:
-
-1. Clone this repo somewhere reachable by the operator's build host.
-2. Symlink (or copy) `src/` into `CloudTAK/api/web/plugins/caltopo-sync` **before** running `npm run build` in the host.
-3. Operate the Node-RED side per [`nodered/README.md`](./nodered). The plugin's "Settings" panel configures the Node-RED base URL **and** the CalTopo account credentials used for map creation (see [Creating Caltopo Maps](#creating-caltopo-maps)).
-
-## Develop
-
-Prerequisites: a local CloudTAK checkout and a running Node-RED instance with the CalTAKsync subflow imported.
-
-```bash
-git clone <this-repo>
-cd cloudtak-plugin-caltopo-sync
-npm install
-bash scripts/dev-link.sh /path/to/CloudTAK
-cd /path/to/CloudTAK/api/web
-npm run serve   # Vite HMR; restart once after first symlink so the glob picks us up
-```
-
-`scripts/dev-link.sh` creates `<CloudTAK>/api/web/plugins/caltopo-sync` as a symlink to this repo's **root**. Idempotent — safe to re-run. (It links the root, not `src/`, so the dev layout matches how the production Docker build clones the repo into `plugins/caltopo-sync/` via `WEB_PLUGINS`. That clone places the plugin at `plugins/caltopo-sync/src/...`, which is why cross-host imports use `../../../../src/...`.)
-
-To lint in this repo (full coverage, runs standalone):
-
-```bash
-npm run lint      # eslint src
-```
-
-For full type verification, the plugin must be symlinked into the host first — its components import host internals via `../../../../src/...` paths that only resolve when the repo root lives at `host/api/web/plugins/caltopo-sync/` (so the components sit at `plugins/caltopo-sync/src/components/...`). The production typecheck path is:
-
-```bash
-bash scripts/dev-link.sh /path/to/CloudTAK
-cd /path/to/CloudTAK/api/web
-npm run check     # host's vue-tsc, sees the symlinked plugin
-```
-
-`npm run check` in this repo (standalone) catches in-source bugs but reports cross-host imports as missing modules — that's expected and not a defect. The Vite dev server (`npm run serve` in the host) is the canonical compile-time check.
-
-`@tak-ps/cloudtak` is a peer dep (types only). The `devDependency` `file:../../CloudTAK/api/web` is for IDE convenience; if your checkout lives elsewhere, edit the path in `package.json`.
-
-## Node-RED side — environment variables
-
-The Caltopo credentials and TAK destination live entirely in the Node-RED instance; the browser plugin never sees them. See [`nodered/README.md`](./nodered) for the full list — at minimum:
-
-- `CALTOPO_CREDENTIAL_ID`
-- `CALTOPO_CREDENTIAL_KEY`
-- PostGIS connection details for the state cache
-- TAK server URL / cert paths used by the existing flow
-
-The plugin's "Health" tab calls `GET /sync/health` on the configured Node-RED base URL — green checks here mean the engine is wired up; red means fix Node-RED first.
-
-## Creating Caltopo Maps
-
-The "Add Pair" tab has a **Create Caltopo Map** card that creates a new SAR-mode
-CalTopo map (shared by URL) with a marker at a parsed call location, titled after
-the Active DataSync (or the DR/Activity number when no DataSync is active).
-
-### Why this needs a Node-RED proxy
-
-The browser **cannot** call `caltopo.com` directly. CalTopo's API returns no CORS
-headers, so a cross-origin `fetch` from the CloudTAK origin is blocked by the
-browser before any response is read (verified: `OPTIONS` → `403`, `GET` → `401`,
-neither with `Access-Control-Allow-Origin`). In Safari this surfaces as an instant
-**"Load failed"**. Note `api.caltopo.com` does not exist — the real API host is
-`caltopo.com`.
-
-The fix is a small **server-side proxy in Node-RED**: the plugin POSTs to Node-RED
-(same-origin-friendly, already CORS-enabled), and Node-RED signs the request
-(HMAC-SHA256) and forwards it to CalTopo server-to-server, where CORS does not
-apply. This is the same path your `/sync` engine already uses successfully.
-
-### One-time setup
-
-1. **Enable CORS in Node-RED (`httpNodeCors`) — required.** The plugin calls the
-   proxy from the browser with `Content-Type: application/json`, which triggers a
-   CORS **preflight** (`OPTIONS`). Per-route `OPTIONS` `http in` nodes do **not**
-   reliably answer that preflight — Node-RED/Express auto-handles `OPTIONS` and
-   returns *no* `Access-Control-Allow-Origin`, so the browser blocks the real
-   `POST` with `Origin … is not allowed by Access-Control-Allow-Origin` even
-   though the endpoint returns `200`. The fix is Node-RED's global CORS setting.
-   In your `settings.js` (the dockerized stack mounts this at `/data/settings.js`)
-   add/uncomment:
-
-   ```js
-   httpNodeCors: {
-       origin: "*",
-       methods: "GET,POST,PUT,DELETE,OPTIONS",
-       allowedHeaders: "Content-Type",
-   },
-   ```
-
-   Then **restart Node-RED**. Verify the preflight now returns `204` with
-   `access-control-allow-origin: *`:
-
-   ```bash
-   curl -s -i -X OPTIONS 'https://<your-nodered-host>/sync/caltopo' \
-     -H 'Origin: https://<your-cloudtak-host>' \
-     -H 'Access-Control-Request-Method: POST' \
-     -H 'Access-Control-Request-Headers: content-type' | sed -n '1,12p'
-   ```
-
-   This also fixes the browser `POST`s to `/sync/pairs` and `/sync/run`, which
-   share the same preflight requirement. (The `Access-Control-Allow-Origin: '*'`
-   headers the flow functions set are harmless alongside this — Node-RED
-   overwrites rather than duplicates the header.)
-2. **Import the proxy flow.** In Node-RED: *Menu → Import* → import
-   [`nodered/caltopo-proxy-flow.json`](./nodered/caltopo-proxy-flow.json) →
-   **Deploy**. It lands on its own "Caltopo Proxy" tab and exposes
-   `POST /sync/caltopo`. The `/sync/` prefix means it reuses the same
-   reverse-proxy route as your existing bridge endpoints, so no Caddy/nginx
-   change is needed. It does not touch the sync bridge, so no re-import of
-   `flow-export.json` or the sync scripts is needed.
-   Full request contract: [`nodered/README.md`](./nodered#caltopo-proxy-post-synccaltopo).
-3. **Set the Node-RED base URL** in the plugin's *Settings* tab (the same URL the
-   Health/Sync features use).
-4. **Enter CalTopo credentials** in *Settings → Caltopo Settings*: Credential ID,
-   Credential Key, and **Team (Folder) ID**. These are stored per CloudTAK user in
-   `localStorage` and forwarded to the proxy on each create-map request.
-
-   > **Which value is the "Team (Folder) ID"?** This is the single most common
-   > setup mistake. Maps are created at `/api/v1/acct/{team_id}/CollaborativeMap`,
-   > so this field must be the 6-character ID of the **team/sub-team (folder) where
-   > your service-account credential has write rights** — *not* your top-level
-   > parent account ID. A parent account ID will often let you *read* (e.g. listing
-   > maps) but return `403 "You don't have write rights for this account."` on
-   > create. Find the correct ID in the team admin URL:
-   > `https://caltopo.com/group/{team_id}/admin/details`. If you have several teams
-   > or sub-teams, use the one you actually want new maps to land in (the same value
-   > your Node-RED flow passes as `caltopoTeamId` / `mapMissionTeamFolder`).
-5. **Remove any `api.caltopo.com` / `caltopo.com` entry** you may have added to
-   the CloudTAK CSP `connect-src` allowlist — it is unnecessary. The browser only
-   talks to Node-RED, whose host is already allowed.
-
-### Credentials: plugin vs. env vars
-
-By default the plugin forwards the credentials from its Settings panel to the
-proxy (over HTTPS). If you prefer the secrets never leave Node-RED, set them as
-env vars on the Node-RED host instead and the proxy will fall back to them:
-
-- `CALTOPO_CREDENTIAL_ID`
-- `CALTOPO_CREDENTIAL_KEY`
-- `CALTOPO_ACCOUNT_ID` (the writable Team/Folder ID described above)
-
-(The proxy reads body-provided credentials first, then these env vars.) If you go
-env-only, ask to have the plugin stop forwarding credentials in the request body.
-
-## Screenshots
-
-_TODO: add screenshots of Settings, Pairs, and Health tabs once the host build is verified._
 
 ## License
 

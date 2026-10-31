@@ -1,5 +1,10 @@
 # Session Resume Guide
 
+> **Superseded on the `etl-backend` branch.** The plugin no longer uses Node-RED: pairs run in the
+> CloudTAK CalTopo ETL (etl-caltopo 5.19.0+), maps are created through flagged CloudTAK Events and
+> PLI is forwarded by the ETL Layer. See `README.md` and `docs/cloudtak-etl-guide.md`. The notes
+> below describe the Node-RED version still on `main`.
+
 A "you're picking this back up cold" snapshot. Read this before doing anything in a future session.
 
 ## Where things stand

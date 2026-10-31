@@ -1,7 +1,7 @@
 {
     "name": "cloudtak-plugin-caltopo-sync",
     "version": "0.0.0",
-    "description": "CloudTAK frontend plugin for bidirectional Caltopo Map \u2194 TAK Mission sync via a Node-RED engine",
+    "description": "CloudTAK frontend plugin that pairs Caltopo maps with TAK missions through the CloudTAK CalTopo ETL",
     "type": "module",
     "private": true,
     "license": "AGPL-3.0",
