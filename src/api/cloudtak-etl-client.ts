@@ -55,6 +55,12 @@ async function fetchLayer(connectionId: number, layerId: number): Promise<Templa
     };
 }
 
+/** True when a Layer environment holds the pair */
+function hasPair(environment: unknown, mapId: string, missionGuid: string): boolean {
+    const pairs = (environment as { Source?: { Pairs?: Array<{ MapId?: string; MissionGuid?: string }> } } | undefined)?.Source?.Pairs;
+    return Array.isArray(pairs) && pairs.some((p) => p.MapId === mapId && p.MissionGuid === missionGuid);
+}
+
 export interface CreatedEtlPair {
     mapId: string;
     layerId: number;
@@ -143,7 +149,12 @@ export async function createEtlPair(request: PairRequest, onStep: (step: string)
             body: { environment: plan.environment },
         });
     } catch (err) {
-        return fail('Saving the pair settings', err);
+        // CloudTAK saves the settings and then calls the Layer's Lambda, which a new Layer is
+        // still deploying - so the save reports an error although it worked. Check what was saved
+        const saved = await fetchLayer(request.connectionId, layerId).catch(() => undefined);
+        if (!saved || !hasPair(saved.environment, plan.mapId, request.missionGuid)) {
+            return fail('Saving the pair settings', err);
+        }
     }
 
     return { mapId: plan.mapId, layerId, dataSyncId, reusedDataSync: 'reuse' in plan.dataSync };
