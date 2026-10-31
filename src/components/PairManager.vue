@@ -300,6 +300,8 @@
             </div>
         </TablerBorder>
 
+        <EtlPairList :mission-name='missionName' />
+
         <TablerBorder
             class='cloudtak-accent text-white mt-3'
             :fill-height='false'
@@ -626,6 +628,7 @@ import type { Pair, SyncMode, SyncResult, CaltopoMapOption, ConnectKeyEntry } fr
 import { PLI_DEFAULT_INTERVAL_SEC, PLI_MIN_INTERVAL_SEC } from '../lib/pli/constants.ts';
 import { connectKeyOptions as listConnectKeyOptions } from '../lib/pli/connect-key-routing.ts';
 import SyncResultDialog from './SyncResultDialog.vue';
+import EtlPairList from './EtlPairList.vue';
 import SettingsPanel from './SettingsPanel.vue';
 
 const store = useCaltopoSyncStore();
