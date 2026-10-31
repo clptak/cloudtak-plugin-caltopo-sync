@@ -300,7 +300,10 @@
             </div>
         </TablerBorder>
 
-        <EtlPairList :mission-name='missionName' />
+        <EtlPairList
+            :mission-name='missionName'
+            :missions='missions'
+        />
 
         <TablerBorder
             class='cloudtak-accent text-white mt-3'
