@@ -33,16 +33,19 @@
             <div v-show='createMapOpen'>
                 <p class='text-white-50 small'>
                     Creates a map in the team's CalTopo account through the CloudTAK ETL, titled after
-                    the Active
-                    <IconAmbulance
-                        :size='16'
-                        stroke='1'
-                        class='mx-1'
-                    />
-                    Data Sync (or the DR/Activity number when none is active). It also adds a CloudTAK
-                    Event at the call location. Once the map exists it is filled into the pair form above.
+                    the TAK Mission (or the DR/Activity number when no Mission is picked). It also adds a
+                    CloudTAK Event at the call location. Once the map exists it is filled into the pair
+                    form above.
                 </p>
                 <div class='row g-2'>
+                    <div class='col-12'>
+                        <TablerEnum
+                            v-model='createMapMissionLabel'
+                            label='TAK Mission'
+                            :options='createMapMissionOptions'
+                            :disabled='missionsLoading'
+                        />
+                    </div>
                     <div class='col-12'>
                         <TablerInput
                             v-model='createMapForm.call_location'
@@ -179,7 +182,6 @@ import {
 } from '@tak-ps/vue-tabler';
 import {
     IconChevronDown,
-    IconAmbulance,
     IconMap,
     IconDownload,
 } from '@tabler/icons-vue';
@@ -237,12 +239,38 @@ const createMapForm = ref<{ call_location: string; dr_or_activity: string; chann
 const createMapError = ref<Error | undefined>();
 const createdMap = ref<CreatedCaltopoMap | undefined>();
 
-const activeMission = computed(() => mapStore.mission?.meta);
+// The Mission the map is created for - starts on the Active Data Sync until one is picked
+const NO_MISSION = 'None - title the map with the DR/Activity #';
+const createMapMissionId = ref<string | undefined>();
+
+const createMapMission = computed<{ name: string; guid: string } | undefined>(() => {
+    const guid = createMapMissionId.value ?? mapStore.mission?.meta?.guid;
+    if (!guid) return undefined;
+    const mission = missions.value.find((m) => m.guid === guid);
+    if (mission) return { name: mission.name, guid: mission.guid };
+    const active = mapStore.mission?.meta;
+    return active?.guid === guid && active.name ? { name: active.name, guid } : undefined;
+});
+
+const createMapMissionOptions = computed(() => {
+    if (missionsLoading.value) return [MISSION_LOADING];
+    return [NO_MISSION, ...missions.value.map((m) => m.name)];
+});
+
+const createMapMissionLabel = computed({
+    get: () => {
+        if (missionsLoading.value) return MISSION_LOADING;
+        return createMapMission.value?.name ?? NO_MISSION;
+    },
+    set: (label: string) => {
+        createMapMissionId.value = missions.value.find((m) => m.name === label)?.guid ?? '';
+    },
+});
 
 const canCreateMap = computed<boolean>(() => {
     return createMapForm.value.call_location.trim() !== ''
         && createMapForm.value.channels.length > 0
-        && (Boolean(activeMission.value?.name) || createMapForm.value.dr_or_activity.trim() !== '');
+        && (Boolean(createMapMission.value) || createMapForm.value.dr_or_activity.trim() !== '');
 });
 
 async function createMap() {
@@ -258,9 +286,7 @@ async function createMap() {
         return;
     }
 
-    const mission = activeMission.value?.name && activeMission.value?.guid
-        ? { name: activeMission.value.name, guid: activeMission.value.guid }
-        : undefined;
+    const mission = createMapMission.value;
 
     creatingMap.value = true;
     try {
