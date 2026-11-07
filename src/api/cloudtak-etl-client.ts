@@ -5,7 +5,7 @@
 import { std, stdurl } from '../../../../src/std.ts';
 import { etlPairsFromLayer } from '../lib/etl-pairs.ts';
 import type { EtlLayer, EtlPair } from '../lib/etl-pairs.ts';
-import { planEtlPair, templateCandidates, goLiveEnvironment } from '../lib/etl-pair-plan.ts';
+import { planEtlPair, planDataDestination, templateCandidates, goLiveEnvironment } from '../lib/etl-pair-plan.ts';
 import type { PairRequest, DataSyncSummary, TemplateLayer } from '../lib/etl-pair-plan.ts';
 
 interface ConnectionList {
@@ -83,9 +83,7 @@ export async function createEtlPair(request: PairRequest, onStep: (step: string)
     const candidate = templateCandidates(existing, request.connectionId)[0];
     const template = candidate ? await fetchLayer(request.connectionId, candidate.layerId) : undefined;
 
-    const dataUrl = stdurl(`/api/connection/${request.connectionId}/data`);
-    dataUrl.searchParams.set('limit', '100');
-    const dataSyncs = (await std(dataUrl) as { items: DataSyncSummary[] }).items ?? [];
+    const dataSyncs = await listDataSyncs(request.connectionId);
 
     const plan = planEtlPair(request, existing, dataSyncs, template);
     if ('error' in plan) throw new Error(plan.error);
@@ -102,18 +100,8 @@ export async function createEtlPair(request: PairRequest, onStep: (step: string)
     } else {
         onStep(`Creating the Data Sync for ${request.missionName}`);
         try {
-            const data = await std(`/api/connection/${request.connectionId}/data`, {
-                method: 'POST',
-                body: plan.dataSync.create,
-            }) as { id: number; mission_exists?: boolean; mission_error?: string; mission_guid?: string | null };
-
-            dataSyncId = data.id;
-            created.push(`Data Sync ${data.id}`);
-
-            if (data.mission_exists === false) throw new Error(data.mission_error || 'the Mission could not be attached');
-            if (data.mission_guid && data.mission_guid !== request.missionGuid) {
-                throw new Error(`it attached Mission ${data.mission_guid}, not ${request.missionGuid}`);
-            }
+            dataSyncId = await createDataSync(request.connectionId, plan.dataSync.create, request.missionGuid);
+            created.push(`Data Sync ${dataSyncId}`);
         } catch (err) {
             return fail('Creating the Data Sync', err);
         }
@@ -158,6 +146,75 @@ export async function createEtlPair(request: PairRequest, onStep: (step: string)
     }
 
     return { mapId: plan.mapId, layerId, dataSyncId, reusedDataSync: 'reuse' in plan.dataSync };
+}
+
+async function listDataSyncs(connectionId: number): Promise<DataSyncSummary[]> {
+    const dataUrl = stdurl(`/api/connection/${connectionId}/data`);
+    dataUrl.searchParams.set('limit', '100');
+    return (await std(dataUrl) as { items: DataSyncSummary[] }).items ?? [];
+}
+
+/** Create a Data Sync and check it attached the expected Mission rather than a new one */
+async function createDataSync(connectionId: number, body: Record<string, unknown>, missionGuid: string): Promise<number> {
+    const data = await std(`/api/connection/${connectionId}/data`, {
+        method: 'POST',
+        body,
+    }) as { id: number; mission_exists?: boolean; mission_error?: string; mission_guid?: string | null };
+
+    if (data.mission_exists === false) throw new Error(`Data Sync ${data.id}: ${data.mission_error || 'the Mission could not be attached'}`);
+    if (data.mission_guid && data.mission_guid !== missionGuid) {
+        throw new Error(`Data Sync ${data.id} attached Mission ${data.mission_guid}, not ${missionGuid}`);
+    }
+    return data.id;
+}
+
+/**
+ * The name of a Mission by GUID, for pairs on Missions the user is not subscribed to -
+ * undefined when the TAK Server does not return it
+ */
+export async function lookupMissionName(guid: string): Promise<string | undefined> {
+    try {
+        const mission = await std(`/api/marti/missions/${encodeURIComponent(guid)}`) as { name?: string };
+        return mission.name || undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Connect a pair's Layer to its Mission's Data Sync on the Layer's Connection - reusing the
+ * Connection's Data Sync of the Mission, else creating one attached by name. Only the Data
+ * Destination is changed, so the pair keeps its settings and links
+ */
+export async function connectEtlPairDataSync(pair: EtlPair, missionName: string | undefined, onStep: (step: string) => void = () => {}): Promise<number> {
+    onStep('Checking the Layer and Data Syncs');
+    const layer = await fetchLayer(pair.connectionId, pair.layerId);
+    const current = (layer.incoming as { data?: number | null } | undefined)?.data ?? null;
+    const layerPairs = (layer.environment as { Source?: { Pairs?: unknown[] } } | undefined)?.Source?.Pairs?.length ?? 0;
+
+    const plan = planDataDestination({ ...pair, dataSyncId: current }, layerPairs, await listDataSyncs(pair.connectionId), missionName);
+    if ('error' in plan) throw new Error(plan.error);
+
+    let dataSyncId: number;
+    if ('reuse' in plan) {
+        dataSyncId = plan.reuse;
+    } else {
+        onStep(`Creating the Data Sync for ${missionName}`);
+        dataSyncId = await createDataSync(pair.connectionId, plan.create, pair.missionGuid);
+    }
+
+    onStep(`Linking Data Sync ${dataSyncId} to the Layer`);
+    try {
+        await std(`/api/connection/${pair.connectionId}/layer/${pair.layerId}/incoming`, {
+            method: 'PATCH',
+            body: { data: dataSyncId },
+        });
+    } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Linking Data Sync ${dataSyncId} to Layer ${pair.layerId} failed: ${reason}. The Data Sync stays - never delete it, as that deletes the Mission`, { cause: err });
+    }
+
+    return dataSyncId;
 }
 
 /** Turn DryRun off on a pair's Layer, so its next run writes to CalTopo */

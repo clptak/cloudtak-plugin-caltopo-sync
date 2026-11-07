@@ -24,6 +24,8 @@ export interface EtlPairStatus {
     failed?: number;
     toTak?: number;
     appTracks?: number;
+    /** CalTopo objects the ETL kept back because CloudTAK would reject them */
+    notSent: Array<{ id: string; title: string; reason: string }>;
     errors: string[];
 }
 
@@ -44,7 +46,7 @@ export interface EtlPair {
     status?: EtlPairStatus;
 }
 
-export type EtlPairHealth = 'ok' | 'error' | 'dry-run' | 'disabled' | 'stale' | 'never';
+export type EtlPairHealth = 'ok' | 'error' | 'partial' | 'dry-run' | 'disabled' | 'stale' | 'never';
 
 /** The subset of a CloudTAK Layer response read here */
 export interface EtlLayer {
@@ -110,6 +112,11 @@ export function etlPairsFromLayer(connection: { id: number; name: string }, laye
                 failed: found.failed as number | undefined,
                 toTak: found.toTak as number | undefined,
                 appTracks: found.appTracks as number | undefined,
+                notSent: Array.isArray(found.notSent) ? found.notSent.map(record).filter((n) => n !== undefined).map((n) => ({
+                    id: String(n.id ?? ''),
+                    title: String(n.title ?? n.id ?? ''),
+                    reason: String(n.reason ?? ''),
+                })) : [],
                 errors: Array.isArray(found.errors) ? found.errors.map(String) : [],
             } : undefined,
         });
@@ -125,7 +132,16 @@ export function etlPairHealth(pair: EtlPair, now = Date.now()): EtlPairHealth {
     if (!pair.status.ok) return 'error';
     if (now - Date.parse(pair.status.at) > ETL_STALE_MS) return 'stale';
     if (pair.status.dryRun) return 'dry-run';
+    if (pair.status.notSent.length) return 'partial';
     return 'ok';
+}
+
+/**
+ * True when nothing can go from CalTopo to TAK: the Layer has no Data Destination (a Layer set
+ * up by hand), so the ETL only copies TAK items to CalTopo
+ */
+export function etlPairNeedsDataSync(pair: EtlPair): boolean {
+    return pair.dataSyncId === null;
 }
 
 /** The last run's changes in a few words, ie: "2 created, 1 updated" */

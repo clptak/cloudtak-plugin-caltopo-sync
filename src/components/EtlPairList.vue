@@ -126,6 +126,20 @@
                 title='Go Live failed'
                 :description='goLiveError'
             />
+            <TablerInlineAlert
+                v-if='fixError'
+                class='mb-2'
+                severity='danger'
+                title='Fix failed'
+                :description='fixError'
+            />
+            <TablerInlineAlert
+                v-if='fixedNote'
+                class='mb-2'
+                severity='success'
+                title='CalTopo → TAK connected'
+                :description='fixedNote'
+            />
             <table class='table card-table table-vcenter'>
                 <thead>
                     <tr>
@@ -161,7 +175,7 @@
                                     class='text-white'
                                 ><code v-text='pair.mapId' /></a>
                             </td>
-                            <td v-text='props.missionName(pair.missionGuid)' />
+                            <td v-text='missionLabel(pair.missionGuid)' />
                             <td>
                                 <span
                                     v-if='pair.status'
@@ -212,6 +226,51 @@
                                 />
                             </td>
                         </tr>
+                        <tr v-if='etlPairNeedsDataSync(pair)'>
+                            <td
+                                colspan='8'
+                                class='pt-0'
+                            >
+                                <div class='d-flex align-items-center gap-2 text-warning small'>
+                                    <span>
+                                        <strong>CalTopo → TAK not connected.</strong>
+                                        TAK items reach CalTopo, but nothing drawn in CalTopo reaches this
+                                        Mission: the Layer has no Data Sync to write into.
+                                    </span>
+                                    <button
+                                        type='button'
+                                        class='btn btn-sm btn-warning ms-auto'
+                                        :disabled='fixing === pairKey(pair)'
+                                        @click='fixDataSync(pair)'
+                                        v-text='fixing === pairKey(pair) ? "Fixing…" : "Fix"'
+                                    />
+                                </div>
+                                <div
+                                    v-if='fixing === pairKey(pair) && fixStep'
+                                    class='text-white-50 small'
+                                    v-text='fixStep'
+                                />
+                            </td>
+                        </tr>
+                        <tr v-if='pair.status && pair.status.notSent.length'>
+                            <td
+                                colspan='8'
+                                class='pt-0'
+                            >
+                                <div class='text-warning small'>
+                                    <strong v-text='`Not in the TAK Mission (${pair.status.notSent.length}):`' />
+                                    Fix these in CalTopo map {{ pair.mapId }} - they come over on the next run.
+                                </div>
+                                <ul class='text-warning small mb-0 ps-3'>
+                                    <li
+                                        v-for='item in pair.status.notSent'
+                                        :key='item.id'
+                                    >
+                                        <strong v-text='item.title' /> - <span v-text='notSentReason(item.reason)' />
+                                    </li>
+                                </ul>
+                            </td>
+                        </tr>
                         <tr v-if='pair.status && pair.status.errors.length'>
                             <td
                                 colspan='8'
@@ -248,17 +307,36 @@ import {
     TablerInput,
 } from '@tak-ps/vue-tabler';
 import { IconPlus } from '@tabler/icons-vue';
-import { listEtlPairs, createEtlPair, goLiveEtlPair } from '../api/cloudtak-etl-client.ts';
-import { etlPairHealth, etlChangeSummary } from '../lib/etl-pairs.ts';
+import { listEtlPairs, createEtlPair, goLiveEtlPair, connectEtlPairDataSync, lookupMissionName } from '../api/cloudtak-etl-client.ts';
+import { etlPairHealth, etlChangeSummary, etlPairNeedsDataSync } from '../lib/etl-pairs.ts';
 import type { EtlPair, EtlPairHealth } from '../lib/etl-pairs.ts';
 import { caltopoMapId } from '../lib/etl-pair-plan.ts';
 
 const props = defineProps<{
-    /** Mission name for a GUID, from the missions the user can see */
-    missionName: (guid: string) => string;
-    /** The TAK Missions the user can see */
+    /** The TAK Missions the user is subscribed to */
     missions: Array<{ guid: string; name: string }>;
 }>();
+
+// Names of paired Missions the user is not subscribed to, looked up once by GUID
+const lookedUp = ref<Map<string, string | undefined>>(new Map());
+
+function missionNameOf(guid: string): string | undefined {
+    return props.missions.find((m) => m.guid === guid)?.name ?? lookedUp.value.get(guid);
+}
+
+function missionLabel(guid: string): string {
+    return missionNameOf(guid) ?? guid;
+}
+
+async function lookUpMissionNames() {
+    const unknown = [...new Set(pairs.value.map((p) => p.missionGuid))]
+        .filter((guid) => !props.missions.some((m) => m.guid === guid) && !lookedUp.value.has(guid));
+
+    for (const guid of unknown) {
+        const name = await lookupMissionName(guid);
+        lookedUp.value = new Map(lookedUp.value).set(guid, name);
+    }
+}
 
 const CONNECTION_PLACEHOLDER = 'Select a Connection…';
 const MISSION_PLACEHOLDER = 'Select a mission…';
@@ -266,6 +344,7 @@ const MISSION_PLACEHOLDER = 'Select a mission…';
 const HEALTH: Record<EtlPairHealth, { label: string; badge: string; tooltip: string }> = {
     'ok': { label: 'OK', badge: 'bg-green', tooltip: 'The last run worked' },
     'error': { label: 'Error', badge: 'bg-red', tooltip: 'The last run had errors - see below the pair' },
+    'partial': { label: 'Items Missing', badge: 'bg-orange', tooltip: 'Some CalTopo objects could not be put in the Mission - listed below the pair' },
     'dry-run': { label: 'Dry Run', badge: 'bg-azure', tooltip: 'Planning only - DryRun is on in the Layer settings, nothing is written to Caltopo' },
     'stale': { label: 'Not Running', badge: 'bg-orange', tooltip: 'No run for over 5 minutes - check the Layer is deployed' },
     'disabled': { label: 'Paused', badge: 'bg-secondary', tooltip: 'The Layer is disabled' },
@@ -290,6 +369,13 @@ function itemsTooltip(pair: EtlPair): string {
     if (s.toTak) parts.push(`${s.toTak} Caltopo objects sent to TAK`);
     if (s.appTracks) parts.push(`${s.appTracks} App Tracks live`);
     return parts.join(' · ');
+}
+
+/** CloudTAK's reasons in words a CalTopo user can act on */
+function notSentReason(reason: string): string {
+    if (/first and last coordinates/i.test(reason)) return 'its outline does not close - redraw it, ending on the first point';
+    if (/at least four|4 or more positions/i.test(reason)) return 'a shape needs at least 3 points';
+    return reason;
 }
 
 function pairKey(pair: EtlPair): string {
@@ -371,11 +457,38 @@ async function goLive(pair: EtlPair) {
     }
 }
 
+const fixing = ref('');
+const fixStep = ref('');
+const fixError = ref('');
+const fixedNote = ref('');
+
+async function fixDataSync(pair: EtlPair) {
+    const name = missionNameOf(pair.missionGuid);
+    if (!window.confirm(`Connect ${pair.layerName} to ${name ?? pair.missionGuid}?\n\n`
+        + `It uses the Connection's Data Sync for this Mission, or creates one attached to the same Mission - no new Mission is made. `
+        + `From the next run, things drawn in CalTopo map ${pair.mapId} appear in the Mission.`)) return;
+
+    fixing.value = pairKey(pair);
+    fixError.value = '';
+    fixedNote.value = '';
+    try {
+        const dataSyncId = await connectEtlPairDataSync(pair, name, (step) => { fixStep.value = step; });
+        fixedNote.value = `${pair.layerName} now writes into Data Sync ${dataSyncId}. Within a minute or two the CalTopo objects of map ${pair.mapId} appear in ${name ?? 'the Mission'}.`;
+        await fetchEtlPairs();
+    } catch (err) {
+        fixError.value = err instanceof Error ? err.message : String(err);
+    } finally {
+        fixStep.value = '';
+        fixing.value = '';
+    }
+}
+
 async function fetchEtlPairs() {
     loading.value = true;
     error.value = undefined;
     try {
         pairs.value = await listEtlPairs();
+        void lookUpMissionNames();
     } catch (err) {
         error.value = err instanceof Error ? err : new Error(String(err));
         pairs.value = [];

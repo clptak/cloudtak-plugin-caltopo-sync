@@ -77,6 +77,51 @@ export function templateCandidates(pairs: EtlPair[], connectionId: number): EtlP
     });
 }
 
+/**
+ * The Connection's Data Sync of a Mission - reused rather than creating a second one, which
+ * would attach the same Mission twice. A Data Sync attaches the Mission of its name
+ */
+export function findDataSync(dataSyncs: DataSyncSummary[], missionGuid: string, missionName?: string): DataSyncSummary | undefined {
+    return dataSyncs.find((d) => d.mission_guid === missionGuid)
+        ?? (missionName ? dataSyncs.find((d) => d.name === missionName) : undefined);
+}
+
+/** The body of a new Data Sync for a Mission - its name attaches the existing Mission */
+function newDataSync(missionName: string, mapId: string): Record<string, unknown> {
+    return {
+        name: missionName,
+        description: `CalTopo map ${mapId}`,
+        mission_sync: true,
+        mission_diff: true,
+        mission_role: MISSION_DIFF_ROLE,
+    };
+}
+
+/**
+ * Plan connecting a pair's Layer to its Mission's Data Sync - the Data Destination a Layer
+ * set up by hand can lack, without which nothing goes from CalTopo to TAK. Same rules as a new
+ * pair: the Connection's Data Sync of the Mission is reused, else one is created by name
+ */
+export function planDataDestination(
+    pair: EtlPair,
+    layerPairs: number,
+    dataSyncs: DataSyncSummary[],
+    missionName: string | undefined,
+): { reuse: number } | { create: Record<string, unknown> } | { error: string } {
+    if (pair.dataSyncId !== null) return { error: `Layer ${pair.layerId} already writes into Data Sync ${pair.dataSyncId}` };
+
+    // A Data Sync is one Mission, so the ETL only sends CalTopo objects to TAK for a single pair
+    if (layerPairs !== 1) {
+        return { error: `Layer ${pair.layerId} holds ${layerPairs} pairs - it can only send CalTopo objects to TAK with exactly one. Give each pair its own Layer with +` };
+    }
+
+    const sync = findDataSync(dataSyncs, pair.missionGuid, missionName);
+    if (sync) return { reuse: sync.id };
+
+    if (!missionName) return { error: `The name of Mission ${pair.missionGuid} could not be looked up, and a Data Sync is created by name` };
+    return { create: newDataSync(missionName, pair.mapId) };
+}
+
 export function planEtlPair(
     request: PairRequest,
     existing: EtlPair[],
@@ -104,21 +149,11 @@ export function planEtlPair(
         }
     }
 
-    // A Mission's own Data Sync is reused - a second one would attach the same Mission twice
-    const sync = dataSyncs.find((d) => d.mission_guid === request.missionGuid)
-        ?? dataSyncs.find((d) => d.name === request.missionName);
+    const sync = findDataSync(dataSyncs, request.missionGuid, request.missionName);
 
     return {
         mapId,
-        dataSync: sync ? { reuse: sync.id } : {
-            create: {
-                name: request.missionName,
-                description: `CalTopo map ${mapId}`,
-                mission_sync: true,
-                mission_diff: true,
-                mission_role: MISSION_DIFF_ROLE,
-            },
-        },
+        dataSync: sync ? { reuse: sync.id } : { create: newDataSync(request.missionName, mapId) },
         layer: {
             // Also the name of the Mission folder CalTopo objects go in - not renamed later
             name: `CalTopo ${mapId}`,

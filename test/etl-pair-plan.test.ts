@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { planEtlPair, caltopoMapId, templateCandidates, goLiveEnvironment, MISSION_DIFF_ROLE } from '../src/lib/etl-pair-plan.ts';
+import { planEtlPair, planDataDestination, caltopoMapId, templateCandidates, goLiveEnvironment, MISSION_DIFF_ROLE } from '../src/lib/etl-pair-plan.ts';
 import type { PairRequest, TemplateLayer } from '../src/lib/etl-pair-plan.ts';
 import type { EtlPair } from '../src/lib/etl-pairs.ts';
 
@@ -111,4 +111,28 @@ test('goLiveEnvironment - DryRun off, everything else kept', () => {
     const env = goLiveEnvironment({ Source: { Mode: 'Sync', DryRun: true, Pairs: [] }, DEBUG: true });
     assert.deepEqual(env, { environment: { Source: { Mode: 'Sync', DryRun: false, Pairs: [] }, DEBUG: true } });
     assert.deepEqual(goLiveEnvironment({ Source: { Mode: 'Map' } }), { error: 'Not a CalTopo Sync Layer' });
+});
+
+test('planDataDestination - a Layer set up by hand reuses the Mission\'s Data Sync, else creates one by name', () => {
+    const bare = pair({ dataSyncId: null, missionGuid: 'guid-old', mapId: 'APJ7U0R' });
+
+    // Matched by Mission GUID first, then by name
+    assert.deepEqual(planDataDestination(bare, 1, [{ id: 7, name: 'other name', mission_guid: 'guid-old' }], 'Old Mission'), { reuse: 7 });
+    assert.deepEqual(planDataDestination(bare, 1, [{ id: 8, name: 'Old Mission', mission_guid: null }], 'Old Mission'), { reuse: 8 });
+
+    assert.deepEqual(planDataDestination(bare, 1, [{ id: 9, name: 'Unrelated', mission_guid: 'guid-x' }], 'Old Mission'), {
+        create: {
+            name: 'Old Mission',
+            description: 'CalTopo map APJ7U0R',
+            mission_sync: true,
+            mission_diff: true,
+            mission_role: MISSION_DIFF_ROLE,
+        },
+    });
+});
+
+test('planDataDestination - refuses a connected Layer, several pairs on one Layer, or an unknown Mission name', () => {
+    assert.match((planDataDestination(pair({ dataSyncId: 3 }), 1, [], 'Old Mission') as { error: string }).error, /already writes into Data Sync 3/);
+    assert.match((planDataDestination(pair({ dataSyncId: null }), 2, [], 'Old Mission') as { error: string }).error, /holds 2 pairs/);
+    assert.match((planDataDestination(pair({ dataSyncId: null }), 1, [], undefined) as { error: string }).error, /could not be looked up/);
 });

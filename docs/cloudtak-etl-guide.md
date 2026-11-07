@@ -5,6 +5,29 @@ they fit together, and which buttons are safe. Read it before you touch **Admin 
 Connections**. The step-by-step setup of a Connection's first pair is in the etl-caltopo repo,
 `docs/ADMIN_PAIRING.md`.
 
+## In plain English – start here
+
+Think of it as a robot that copies things between a CalTopo map and a TAK Mission.
+
+- **Connection = the robot's ID badge.** CloudTAK has a robot user that does automatic work on
+  the TAK Server. The Connection is its login. Ours is called **Caltopo**.
+- **Layer = the robot's job.** Every minute it copies changes between **one** CalTopo map and
+  **one** TAK Mission. It works under its badge.
+- **Data Sync = the robot's key to one Mission.** The robot can only put things *into* a
+  Mission it has a key for, and keys are issued **per badge** – a key made under another
+  Connection doesn't work for this robot, and doesn't even show in its list.
+
+What that means in practice:
+
+- **Use the plugin's + button for every pair.** It makes the job, makes (or reuses) the key and
+  hands it to the robot – nobody needs to know any of this.
+- **The first pair on a Connection is the only one built by hand**, and the one place the key
+  gets forgotten. Without it the robot can still send TAK items to CalTopo, but nothing drawn in
+  CalTopo – markers, lines or shapes – reaches the Mission. See
+  [Nothing from CalTopo shows up in TAK](#nothing-from-caltopo-shows-up-in-tak).
+- **Never take a key away** (delete a Data Sync or turn its Mission Sync off) – that deletes the
+  Mission itself. See the two rules below.
+
 ## The two rules that can't be undone
 
 1. **Never delete a Data Sync, and never turn its Mission Sync off.** CloudTAK then **deletes
@@ -95,6 +118,7 @@ Layer's Data Destination.
 | **Waiting** | The Layer hasn't run yet. | Wait two minutes after creating it. |
 | **Not Running** | No run for over 5 minutes. | Check the Layer is enabled and its Deployment tab says `CREATE_COMPLETE` or `UPDATE_COMPLETE`. |
 | **Error** | The last run failed. The red line under the row says why. | See below. |
+| **Items Missing** | Some CalTopo objects can't be put in the Mission. The orange list under the row names each one and why. | Fix them in CalTopo (usually: redraw the shape ending on its first point). They come over on the next run. |
 | **Paused** | The Layer's Enabled switch is off. | Turn it on to resume. |
 
 Common errors:
@@ -103,15 +127,35 @@ Common errors:
   into the team account (a share link doesn't help – CalTopo's API ignores those).
 - **`401 Invalid Token`** – the Layer's CloudTAK API token is wrong or from another CloudTAK.
 - **`Failed to post layer to ETL (400 - Submitted)`** – CloudTAK refused some objects; the rest
-  went through. Report it with the map ID.
+  went through. From etl-caltopo 5.19.1 such objects are kept back and listed under **Items
+  Missing** instead. Report it with the map ID if you still see this.
+- **CalTopo → TAK not connected** (yellow, with a **Fix** button) – the Layer has no Data Sync,
+  so nothing drawn in CalTopo reaches the Mission. Click **Fix**.
 
 ## Creating a Caltopo map
 
 **Create Caltopo Map** (below the pair list) makes a new map in the team's Caltopo account, named
-after the active Data Sync, and fills it into the pair form. Behind the scenes it adds a CloudTAK
+after the TAK Mission you pick (the active one to start with, or the DR/Activity number with
+none), and fills it into the pair form. Behind the scenes it adds a CloudTAK
 **Event** at the call location that asks the CalTopo Layer for a map, so pick channels that include
 the Connection's. The Layer needs its **Outgoing** settings `AccountId` and `TeamId` filled in.
 Events made by other plugins (incidents, field teams) never create maps.
+
+## Nothing from CalTopo shows up in TAK
+
+TAK items reach CalTopo, but things drawn in CalTopo never appear in the Mission. The robot has
+no key: the Layer has no **Data Destination**. Its log (Layer → **Deployment** → **Layer Runtime
+Logs**) says `CalTopo -> TAK: the Layer has no Data Sync` every minute.
+
+1. **Make a key on the Layer's own Connection.** Open the Connection (Admin → Connections →
+   Caltopo) → **Data Syncs** → **+**. Set **Data Name** to the Mission's **exact** name – copy it
+   from the plugin's pair row. Leave **Mission Sync** and **Mission Layer Diff** on, and **Save**.
+   Because the name matches, this attaches to the existing Mission rather than making a new one.
+   (A Data Sync for that Mission on a *different* Connection doesn't count, and isn't listed.)
+2. **Give it to the robot.** Open the Layer → **Incoming** → **Config** → the pencil → the gear
+   next to **Data Destination** → pick the new Data Sync → **Save**.
+
+Within a minute the log says `CalTopo -> TAK: sent N CalTopo objects`.
 
 ## Safe and unsafe buttons
 

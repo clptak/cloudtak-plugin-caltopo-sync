@@ -84,6 +84,16 @@ test('etlPairHealth - disabled, never run, errors, stale, dry run and ok', () =>
     assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, ok: false } }, NOW), 'error');
     assert.equal(etlPairHealth(pair, Date.parse(pair.status!.at) + ETL_STALE_MS + 1), 'stale');
     assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, dryRun: true } }, NOW), 'dry-run');
+    assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, notSent: [{ id: 'p', title: 'P', reason: 'r' }] } }, NOW), 'partial');
+});
+
+test('etlPairsFromLayer - CalTopo objects the ETL kept back are listed, none by default', () => {
+    const [plain] = etlPairsFromLayer(CONNECTION, layer({}, STATUS));
+    assert.deepEqual(plain.status?.notSent, []);
+
+    const kept = { ...STATUS, pairs: [{ ...STATUS.pairs[0], notSent: [{ id: 'abc', title: 'Polygon from Caltopo', reason: 'First and last coordinates in a ring must be the same' }, 'junk'] }] };
+    const [pair] = etlPairsFromLayer(CONNECTION, layer({}, kept));
+    assert.deepEqual(pair.status?.notSent, [{ id: 'abc', title: 'Polygon from Caltopo', reason: 'First and last coordinates in a ring must be the same' }]);
 });
 
 test('etlChangeSummary - counts in words, dry runs as planned', () => {

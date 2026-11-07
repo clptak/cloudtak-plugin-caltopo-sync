@@ -2,7 +2,6 @@
     <div class='caltopo-sync-panel px-3 py-3'>
         <EtlPairList
             ref='pairList'
-            :mission-name='missionName'
             :missions='missions'
         />
 
@@ -206,11 +205,6 @@ const missionsLoading = ref(false);
 
 const MISSION_PLACEHOLDER = 'Select a mission…';
 const MISSION_LOADING = 'Loading missions…';
-
-function missionName(guid: string): string {
-    const m = missions.value.find((mm: Mission) => mm.guid === guid);
-    return m ? m.name : guid;
-}
 
 async function fetchMissions() {
     missionsLoading.value = true;
