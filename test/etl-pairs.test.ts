@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { etlPairsFromLayer, etlPairHealth, etlChangeSummary, ETL_STALE_MS } from '../src/lib/etl-pairs.ts';
+import { etlPairsFromLayer, etlPairHealth, etlChangeSummary, etlLayerSiblings, ETL_STALE_MS } from '../src/lib/etl-pairs.ts';
 import type { EtlLayer } from '../src/lib/etl-pairs.ts';
 
 const NOW = Date.parse('2026-10-31T16:30:00Z');
@@ -84,6 +84,8 @@ test('etlPairHealth - disabled, never run, errors, stale, dry run and ok', () =>
     assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, ok: false } }, NOW), 'error');
     assert.equal(etlPairHealth(pair, Date.parse(pair.status!.at) + ETL_STALE_MS + 1), 'stale');
     assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, dryRun: true } }, NOW), 'dry-run');
+    // Paused: the Layer setting shows before the next run reports it
+    assert.equal(etlPairHealth({ ...pair, dryRun: true }, NOW), 'dry-run');
     assert.equal(etlPairHealth({ ...pair, status: { ...pair.status!, notSent: [{ id: 'p', title: 'P', reason: 'r' }] } }, NOW), 'partial');
 });
 
@@ -104,4 +106,15 @@ test('etlChangeSummary - counts in words, dry runs as planned', () => {
     assert.equal(etlChangeSummary({ ...status, plan: { create: 2, update: 1, skip: 3 } }), '2 created, 1 updated');
     assert.equal(etlChangeSummary({ ...status, plan: { create: 2 }, failed: 1 }), '2 created, 1 failed');
     assert.equal(etlChangeSummary({ ...status, dryRun: true, plan: { delete: 1 } }), '1 to be deleted');
+});
+
+test('etlLayerSiblings - the other pairs a Pause on this Layer also pauses', () => {
+    const two = { incoming: { environment: { Source: { Mode: 'Sync', Pairs: [{ MapId: 'A', MissionGuid: 'g1' }, { MapId: 'B', MissionGuid: 'g2' }] } } } };
+    const shared = etlPairsFromLayer(CONNECTION, layer(two));
+    const [other] = etlPairsFromLayer(CONNECTION, layer({ id: 5 }));
+    const [elsewhere] = etlPairsFromLayer({ id: 2, name: 'Other' }, layer());
+    const all = [...shared, other, elsewhere];
+
+    assert.deepEqual(etlLayerSiblings(shared[0], all).map((p) => p.mapId), ['B']);
+    assert.deepEqual(etlLayerSiblings(other, all), []);
 });

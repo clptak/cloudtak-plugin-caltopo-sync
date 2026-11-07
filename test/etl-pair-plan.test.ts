@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { planEtlPair, planDataDestination, caltopoMapId, templateCandidates, goLiveEnvironment, MISSION_DIFF_ROLE } from '../src/lib/etl-pair-plan.ts';
+import { planEtlPair, planDataDestination, caltopoMapId, templateCandidates, dryRunEnvironment, MISSION_DIFF_ROLE } from '../src/lib/etl-pair-plan.ts';
 import type { PairRequest, TemplateLayer } from '../src/lib/etl-pair-plan.ts';
 import type { EtlPair } from '../src/lib/etl-pairs.ts';
 
@@ -107,10 +107,14 @@ test('templateCandidates - the Connection\'s pair Layers, newest version first',
     assert.deepEqual(templateCandidates(pairs, 5), []);
 });
 
-test('goLiveEnvironment - DryRun off, everything else kept', () => {
-    const env = goLiveEnvironment({ Source: { Mode: 'Sync', DryRun: true, Pairs: [] }, DEBUG: true });
-    assert.deepEqual(env, { environment: { Source: { Mode: 'Sync', DryRun: false, Pairs: [] }, DEBUG: true } });
-    assert.deepEqual(goLiveEnvironment({ Source: { Mode: 'Map' } }), { error: 'Not a CalTopo Sync Layer' });
+test('dryRunEnvironment - Go Live turns DryRun off, Pause turns it on, everything else kept', () => {
+    const live = dryRunEnvironment({ Source: { Mode: 'Sync', DryRun: true, Pairs: [] }, DEBUG: true }, false);
+    assert.deepEqual(live, { environment: { Source: { Mode: 'Sync', DryRun: false, Pairs: [] }, DEBUG: true } });
+
+    const paused = dryRunEnvironment({ Source: { Mode: 'Sync', DryRun: false, Pairs: [{ MapId: 'A', MissionGuid: 'g' }] } }, true);
+    assert.deepEqual(paused, { environment: { Source: { Mode: 'Sync', DryRun: true, Pairs: [{ MapId: 'A', MissionGuid: 'g' }] } } });
+
+    assert.deepEqual(dryRunEnvironment({ Source: { Mode: 'Map' } }, true), { error: 'Not a CalTopo Sync Layer' });
 });
 
 test('planDataDestination - a Layer set up by hand reuses the Mission\'s Data Sync, else creates one by name', () => {

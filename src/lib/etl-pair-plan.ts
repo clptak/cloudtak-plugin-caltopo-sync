@@ -178,10 +178,13 @@ export function planEtlPair(
     };
 }
 
-/** A pair Layer's environment with DryRun turned off */
-export function goLiveEnvironment(environment: unknown): { environment: Record<string, unknown> } | { error: string } {
+/**
+ * A pair Layer's environment with DryRun set - false is Go Live, true is Pause. A paused Layer
+ * still reads both sides and logs its plan, but writes nothing to CalTopo or the TAK Mission.
+ */
+export function dryRunEnvironment(environment: unknown, dryRun: boolean): { environment: Record<string, unknown> } | { error: string } {
     const env = record(environment);
     const source = record(env?.Source);
     if (!env || !source || source.Mode !== 'Sync') return { error: 'Not a CalTopo Sync Layer' };
-    return { environment: { ...env, Source: { ...source, DryRun: false } } };
+    return { environment: { ...env, Source: { ...source, DryRun: dryRun } } };
 }

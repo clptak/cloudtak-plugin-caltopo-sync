@@ -5,7 +5,7 @@
 import { std, stdurl } from '../../../../src/std.ts';
 import { etlPairsFromLayer } from '../lib/etl-pairs.ts';
 import type { EtlLayer, EtlPair } from '../lib/etl-pairs.ts';
-import { planEtlPair, planDataDestination, templateCandidates, goLiveEnvironment } from '../lib/etl-pair-plan.ts';
+import { planEtlPair, planDataDestination, templateCandidates, dryRunEnvironment } from '../lib/etl-pair-plan.ts';
 import type { PairRequest, DataSyncSummary, TemplateLayer } from '../lib/etl-pair-plan.ts';
 
 interface ConnectionList {
@@ -217,14 +217,31 @@ export async function connectEtlPairDataSync(pair: EtlPair, missionName: string 
     return dataSyncId;
 }
 
-/** Turn DryRun off on a pair's Layer, so its next run writes to CalTopo */
-export async function goLiveEtlPair(pair: EtlPair): Promise<void> {
+/**
+ * Set DryRun on a pair's Layer: false (Go Live) and its next run writes to CalTopo and the
+ * Mission; true (Pause) and its next run writes to neither. Only the Layer's settings change, so
+ * there is no redeploy - it takes effect on the next run, within a minute.
+ */
+async function setEtlPairDryRun(pair: EtlPair, dryRun: boolean): Promise<void> {
     const layer = await fetchLayer(pair.connectionId, pair.layerId);
-    const live = goLiveEnvironment(layer.environment);
-    if ('error' in live) throw new Error(live.error);
+    const next = dryRunEnvironment(layer.environment, dryRun);
+    if ('error' in next) throw new Error(next.error);
 
     await std(`/api/connection/${pair.connectionId}/layer/${pair.layerId}/incoming`, {
         method: 'PATCH',
-        body: { environment: live.environment },
+        body: { environment: next.environment },
     });
+}
+
+export function goLiveEtlPair(pair: EtlPair): Promise<void> {
+    return setEtlPairDryRun(pair, false);
+}
+
+export function pauseEtlPair(pair: EtlPair): Promise<void> {
+    return setEtlPairDryRun(pair, true);
+}
+
+/** CloudTAK's Layer settings page, where the Layer's Enabled switch stops everything */
+export function etlLayerEditUrl(pair: EtlPair): string {
+    return `/connection/${pair.connectionId}/layer/${pair.layerId}/edit`;
 }

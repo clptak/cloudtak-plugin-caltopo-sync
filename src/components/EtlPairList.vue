@@ -127,6 +127,65 @@
                 :description='goLiveError'
             />
             <TablerInlineAlert
+                v-if='pauseError'
+                class='mb-2'
+                severity='danger'
+                title='Pause failed - the Layer is still writing'
+                :description='`${pauseError}. To stop it now, turn the Layer off in CloudTAK: Connections → the Connection → the Layer → Edit → Enabled.`'
+            />
+            <div
+                v-if='paused'
+                class='border border-warning rounded p-2 mb-2 small'
+                role='alert'
+            >
+                <div class='d-flex align-items-start gap-2'>
+                    <div class='text-warning'>
+                        <strong v-text='`${paused.layerName} is paused.`' />
+                        From its next run (within a minute) nothing is written to CalTopo or to the TAK
+                        Mission. It keeps reading both and logging what it would have done. The row shows
+                        Waiting until that run, then Dry Run. Go Live resumes it.
+                    </div>
+                    <button
+                        type='button'
+                        class='btn-close btn-close-white ms-auto'
+                        aria-label='Dismiss'
+                        @click='paused = undefined'
+                    />
+                </div>
+                <div class='mt-2'>
+                    <strong>Pause does not stop:</strong>
+                </div>
+                <ul class='mb-1 ps-3'>
+                    <li>
+                        <strong>TAK positions going to CalTopo.</strong> To stop everything, turn the Layer
+                        off in CloudTAK:
+                        <a
+                            :href='etlLayerEditUrl(paused)'
+                            target='_blank'
+                            rel='noopener'
+                            class='text-white'
+                        >open {{ paused.layerName }}'s settings</a>
+                        and switch <strong>Enabled</strong> off. That redeploys the Layer and takes a few
+                        minutes.
+                    </li>
+                    <li v-if='pausedSiblings.length'>
+                        <strong>These other pairs on the same Layer are paused too</strong> - Pause is a
+                        Layer setting:
+                        <ul class='ps-3 mb-0'>
+                            <li
+                                v-for='other in pausedSiblings'
+                                :key='pairKey(other)'
+                                v-text='`CalTopo map ${other.mapId} ↔ ${missionLabel(other.missionGuid)}`'
+                            />
+                        </ul>
+                    </li>
+                    <li v-else>
+                        <strong>Every pair on this Layer.</strong> Pause is a Layer setting - this Layer
+                        carries only this pair.
+                    </li>
+                </ul>
+            </div>
+            <TablerInlineAlert
                 v-if='fixError'
                 class='mb-2'
                 severity='danger'
@@ -224,6 +283,15 @@
                                     @click='goLive(pair)'
                                     v-text='goingLive === pairKey(pair) ? "Going live…" : "Go Live"'
                                 />
+                                <button
+                                    v-if='!pair.dryRun && pair.enabled'
+                                    v-tooltip='"Stop writing to CalTopo and the TAK Mission from the next run - Go Live resumes"'
+                                    type='button'
+                                    class='btn btn-sm btn-warning'
+                                    :disabled='pausing === pairKey(pair)'
+                                    @click='pause(pair)'
+                                    v-text='pausing === pairKey(pair) ? "Pausing…" : "Pause"'
+                                />
                             </td>
                         </tr>
                         <tr v-if='etlPairNeedsDataSync(pair)'>
@@ -288,7 +356,8 @@
                 </tbody>
             </table>
             <div class='text-muted small px-2 pb-2'>
-                Each pair runs every minute in CloudTAK - nothing to start or stop here.
+                Each pair runs every minute in CloudTAK. Pause stops a Layer writing to CalTopo and the
+                Mission; turning the Layer off in CloudTAK stops everything.
             </div>
         </div>
     </TablerBorder>
@@ -307,8 +376,8 @@ import {
     TablerInput,
 } from '@tak-ps/vue-tabler';
 import { IconPlus } from '@tabler/icons-vue';
-import { listEtlPairs, createEtlPair, goLiveEtlPair, connectEtlPairDataSync, lookupMissionName } from '../api/cloudtak-etl-client.ts';
-import { etlPairHealth, etlChangeSummary, etlPairNeedsDataSync } from '../lib/etl-pairs.ts';
+import { listEtlPairs, createEtlPair, goLiveEtlPair, pauseEtlPair, etlLayerEditUrl, connectEtlPairDataSync, lookupMissionName } from '../api/cloudtak-etl-client.ts';
+import { etlPairHealth, etlChangeSummary, etlPairNeedsDataSync, etlLayerSiblings } from '../lib/etl-pairs.ts';
 import type { EtlPair, EtlPairHealth } from '../lib/etl-pairs.ts';
 import { caltopoMapId } from '../lib/etl-pair-plan.ts';
 
@@ -345,9 +414,9 @@ const HEALTH: Record<EtlPairHealth, { label: string; badge: string; tooltip: str
     'ok': { label: 'OK', badge: 'bg-green', tooltip: 'The last run worked' },
     'error': { label: 'Error', badge: 'bg-red', tooltip: 'The last run had errors - see below the pair' },
     'partial': { label: 'Items Missing', badge: 'bg-orange', tooltip: 'Some CalTopo objects could not be put in the Mission - listed below the pair' },
-    'dry-run': { label: 'Dry Run', badge: 'bg-azure', tooltip: 'Planning only - DryRun is on in the Layer settings, nothing is written to Caltopo' },
+    'dry-run': { label: 'Dry Run', badge: 'bg-azure', tooltip: 'Paused or not live yet - planning only, nothing is written to CalTopo or the TAK Mission. Go Live to start writing' },
     'stale': { label: 'Not Running', badge: 'bg-orange', tooltip: 'No run for over 5 minutes - check the Layer is deployed' },
-    'disabled': { label: 'Paused', badge: 'bg-secondary', tooltip: 'The Layer is disabled' },
+    'disabled': { label: 'Layer Off', badge: 'bg-secondary', tooltip: 'The Layer is turned off in CloudTAK - nothing runs. Turn it back on in the Layer settings' },
     'never': { label: 'Waiting', badge: 'bg-secondary', tooltip: 'No run recorded yet - the Layer needs etl-caltopo 5.18.0 or later' },
 };
 
@@ -454,6 +523,40 @@ async function goLive(pair: EtlPair) {
         goLiveError.value = err instanceof Error ? err.message : String(err);
     } finally {
         goingLive.value = '';
+    }
+}
+
+const pausing = ref('');
+const pauseError = ref('');
+// The pair last paused, for the notice of what Pause does not stop
+const paused = ref<EtlPair | undefined>();
+const pausedSiblings = computed(() => paused.value ? etlLayerSiblings(paused.value, pairs.value) : []);
+
+async function pause(pair: EtlPair) {
+    const siblings = etlLayerSiblings(pair, pairs.value);
+    const others = siblings.length
+        ? `• Other pairs on this Layer. Pause is a Layer setting, so these pause too:\n${siblings.map((p) => `    – CalTopo map ${p.mapId} ↔ ${missionLabel(p.missionGuid)}`).join('\n')}`
+        : '• Other pairs on this Layer. Pause is a Layer setting - this Layer carries only this pair.';
+
+    if (!window.confirm(`Pause ${pair.layerName}?\n\n`
+        + 'From its next run (within a minute) nothing is written to CalTopo or to the TAK Mission. '
+        + 'It keeps reading both and logging what it would have done. Go Live resumes it.\n\n'
+        + 'PAUSE DOES NOT STOP:\n'
+        + '• TAK positions going to CalTopo. To stop everything, turn the Layer off in CloudTAK: '
+        + `Connections → ${pair.connectionName} → ${pair.layerName} → Edit → Enabled.\n`
+        + others)) return;
+
+    pausing.value = pairKey(pair);
+    pauseError.value = '';
+    paused.value = undefined;
+    try {
+        await pauseEtlPair(pair);
+        paused.value = pair;
+        await fetchEtlPairs();
+    } catch (err) {
+        pauseError.value = err instanceof Error ? err.message : String(err);
+    } finally {
+        pausing.value = '';
     }
 }
 

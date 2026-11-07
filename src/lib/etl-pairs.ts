@@ -131,7 +131,8 @@ export function etlPairHealth(pair: EtlPair, now = Date.now()): EtlPairHealth {
     if (!pair.status) return 'never';
     if (!pair.status.ok) return 'error';
     if (now - Date.parse(pair.status.at) > ETL_STALE_MS) return 'stale';
-    if (pair.status.dryRun) return 'dry-run';
+    // pair.dryRun is the Layer setting, so Pause shows at once rather than after the next run
+    if (pair.dryRun || pair.status.dryRun) return 'dry-run';
     if (pair.status.notSent.length) return 'partial';
     return 'ok';
 }
@@ -142,6 +143,16 @@ export function etlPairHealth(pair: EtlPair, now = Date.now()): EtlPairHealth {
  */
 export function etlPairNeedsDataSync(pair: EtlPair): boolean {
     return pair.dataSyncId === null;
+}
+
+/**
+ * The other pairs on the same Layer. DryRun is a Layer setting, so pausing one pair pauses these
+ * too
+ */
+export function etlLayerSiblings(pair: EtlPair, pairs: EtlPair[]): EtlPair[] {
+    return pairs.filter((p) => p.connectionId === pair.connectionId
+        && p.layerId === pair.layerId
+        && !(p.mapId === pair.mapId && p.missionGuid === pair.missionGuid));
 }
 
 /** The last run's changes in a few words, ie: "2 created, 1 updated" */

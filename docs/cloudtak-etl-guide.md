@@ -117,12 +117,12 @@ Layer's Data Destination.
 | Status | Meaning | What to do |
 |---|---|---|
 | **OK** | The last run worked. | Nothing. |
-| **Dry Run** | Planning only – nothing is written to CalTopo. | Check **Changes**, then Go Live. |
+| **Dry Run** | Paused, or not live yet. Planning only – nothing is written to CalTopo or the TAK Mission. | Check **Changes**, then Go Live. |
 | **Waiting** | The Layer hasn't run yet. | Wait two minutes after creating it. |
 | **Not Running** | No run for over 5 minutes. | Check the Layer is enabled and its Deployment tab says `CREATE_COMPLETE` or `UPDATE_COMPLETE`. |
 | **Error** | The last run failed. The red line under the row says why. | See below. |
 | **Items Missing** | Some CalTopo objects can't be put in the Mission. The orange list under the row names each one and why. | Fix them in CalTopo (usually: redraw the shape ending on its first point). They come over on the next run. |
-| **Paused** | The Layer's Enabled switch is off. | Turn it on to resume. |
+| **Layer Off** | The Layer's Enabled switch is off in CloudTAK – nothing runs. | Turn it on to resume. |
 
 Common errors:
 
@@ -134,6 +134,26 @@ Common errors:
   Missing** instead. Report it with the map ID if you still see this.
 - **CalTopo → TAK not connected** (yellow, with a **Fix** button) – the Layer has no Data Sync,
   so nothing drawn in CalTopo reaches the Mission. Click **Fix**.
+
+## Stopping a pair quickly
+
+If CalTopo starts sending junk (or deleting things), stop the pair before it spreads.
+
+**Pause** (in the plugin, on a live pair's row) – the fast stop:
+
+- From the next run, within a minute, nothing is written to CalTopo or to the TAK Mission. The
+  Layer keeps reading both and logs what it *would* have done.
+- No redeploy, so it works even while the Layer is busy updating.
+- The row shows **Waiting**, then **Dry Run** after the next run.
+- **Go Live** resumes it. The first live run matches the items up again, as it does for a new pair.
+
+**What Pause does not stop:**
+
+- **TAK positions going to CalTopo.** To stop everything, turn the Layer off: Admin →
+  Connections → the Caltopo Connection → the Layer → **Edit** → **Enabled** off → **Save**. That
+  redeploys the Layer and takes a few minutes. The plugin links to this page after a Pause.
+- **Other pairs on the same Layer.** Pause is a Layer setting, so every pair on that Layer pauses
+  together. The plugin lists them before you confirm.
 
 ## Creating a Caltopo map
 
@@ -164,7 +184,8 @@ Within a minute the log says `CalTopo -> TAK: sent N CalTopo objects`.
 
 | Action | Safe? | What happens |
 |---|---|---|
-| Layer → edit → **Enabled** off/on | ✅ | Pauses/resumes the pair. |
+| Plugin → **Pause** | ✅ | Stops writing to CalTopo and the Mission within a minute. TAK positions still go to CalTopo. Pauses every pair on that Layer. |
+| Layer → edit → **Enabled** off/on | ✅ | Stops/starts everything on that Layer, including TAK positions. Takes a few minutes (redeploy). |
 | Layer → **Deployment** → change Task version + redeploy | ✅ | Updates the program. Changing the version alone does nothing until the stack is redeployed. |
 | Plugin → **Go Live** | ⚠️ | Starts writing to CalTopo, which has **no undo**. Read the dry run first. |
 | Editing a Layer's **Environment** (settings) | ⚠️ | Saving clears the pair's memory of which items match; the next run matches them up again. Don't edit while a pair is busy. |
