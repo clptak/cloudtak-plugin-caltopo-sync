@@ -5,6 +5,9 @@ they fit together, and which buttons are safe. Read it before you touch **Admin 
 Connections**. The step-by-step setup of a Connection's first pair is in the etl-caltopo repo,
 `docs/ADMIN_PAIRING.md`.
 
+To roll out a new ETL or plugin version to both CloudTAKs, follow
+[release-playbook.md](./release-playbook.md).
+
 ## In plain English – start here
 
 Think of it as a robot that copies things between a CalTopo map and a TAK Mission.

@@ -7,6 +7,7 @@ The plugin is the admin's window onto it.
 
 New to TAK or CloudTAK? Read [docs/cloudtak-etl-guide.md](./docs/cloudtak-etl-guide.md) first – it
 explains Connections, Layers and Data Syncs and which buttons are safe.
+Rolling out an update? Follow [docs/release-playbook.md](./docs/release-playbook.md).
 
 ## What the plugin does
 
